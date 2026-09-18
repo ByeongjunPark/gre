@@ -3,7 +3,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>GRE Verbal Mock Test — 2026-05-07 24회</title>
 <link rel="stylesheet" href="css/explanation.css">
+<link rel="stylesheet" href="css/ets_gre_exam.css">
 <script src="js/explanation_engine.js"></script>
+<script src="js/ets_exam_controller.js"></script>
 <style>
   :root {
     --bg: #f7f5f0;
@@ -1832,6 +1834,35 @@ function hideModal() {
 // ============================================================
 function render() {
   const app = document.getElementById('app');
+  if (window.ETSExamController) {
+    window.ETSExamController.init();
+    if (state.screen === 'start') {
+      window.ETSExamController.renderStartScreen(app, examData, handleStart);
+      return;
+    } else if (state.screen === 'sectionIntro') {
+      window.ETSExamController.renderSectionIntro(app, examData, getCurrentSection(), handleSectionStart);
+      return;
+    } else if (state.screen === 'question') {
+      window.ETSExamController.renderExamScreen(app, examData, state, {
+        onNext: handleNext,
+        onPrev: handlePrev,
+        onFinishSection: finishSection,
+        onJump: (idx) => {
+          state.questionIdx = idx;
+          render();
+        },
+        onQuit: () => {
+          stopTimer();
+          state.screen = 'results';
+          render();
+        }
+      });
+      return;
+    } else if (state.screen === 'results') {
+      renderResults(app);
+      return;
+    }
+  }
   if (state.screen === 'start') {
     renderStart(app);
   } else if (state.screen === 'sectionIntro') {

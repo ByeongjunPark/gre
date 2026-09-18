@@ -5,8 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>GRE Verbal Mock Test — 38회</title>
 <link rel="stylesheet" href="css/explanation.css">
+<link rel="stylesheet" href="css/ets_gre_exam.css">
 <script src="js/explanations_38.js"></script>
 <script src="js/explanation_engine.js"></script>
+<script src="js/ets_exam_controller.js"></script>
 <style>
   :root {
     --bg: #f7f5f0;
@@ -1877,6 +1879,36 @@ function hideModal() {
 // ============================================================
 function render() {
   const app = document.getElementById('app');
+  if (window.ETSExamController) {
+    window.ETSExamController.init();
+    if (state.screen === 'start') {
+      window.ETSExamController.renderStartScreen(app, examData, handleStart);
+      return;
+    } else if (state.screen === 'sectionIntro') {
+      window.ETSExamController.renderSectionIntro(app, examData, getCurrentSection(), handleSectionStart);
+      return;
+    } else if (state.screen === 'question') {
+      window.ETSExamController.renderExamScreen(app, examData, state, {
+        onNext: handleNext,
+        onPrev: handlePrev,
+        onFinishSection: finishSection,
+        onJump: (idx) => {
+          state.questionIdx = idx;
+          render();
+        },
+        onQuit: () => {
+          stopTimer();
+          state.screen = 'results';
+          render();
+        }
+      });
+      return;
+    } else if (state.screen === 'results') {
+      renderResults(app);
+      return;
+    }
+  }
+
   if (state.screen === 'start') {
     renderStart(app);
   } else if (state.screen === 'sectionIntro') {
@@ -2316,15 +2348,6 @@ function renderResults(app) {
         <button class="btn btn-primary" onclick="location.reload()">다시 풀기</button>
         <a class="btn" href="index.html">모의고사 목록으로</a>
       </div>
-
-      <aside class="results-help" aria-labelledby="results-help-title">
-        <h3 id="results-help-title">해설 및 수업 안내</h3>
-        <p>문제 해설이나 수업 안내가 필요한 학생은 아래에서 원하는 채널을 클릭해 주세요.</p>
-        <div class="results-help-links">
-          <a class="btn btn-primary" href="https://open.kakao.com/o/s0ifxj1f" target="_blank" rel="noopener">Kakao Open Chat</a>
-          <a class="btn" href="https://songverbalportal.pages.dev/" target="_blank" rel="noopener">Song Verbal Portal</a>
-        </div>
-      </aside>
     </main>
   `;
 }

@@ -591,15 +591,11 @@
             <a class="btn" href="index.html">모의고사 목록으로</a>
           </div>
 
-          <!-- Kakao / Portal Links -->
-          <aside class="results-help" aria-labelledby="results-help-title" style="margin-top: 40px;">
-            <h3 id="results-help-title">해설 및 수업 안내</h3>
-            <p>GRE Verbal 실전 대비 및 추가 질의응답이 필요한 경우 아래 채널을 이용하실 수 있습니다.</p>
-            <div class="results-help-links">
-              <a class="btn btn-primary" href="https://open.kakao.com/o/s0ifxj1f" target="_blank" rel="noopener">Kakao Open Chat</a>
-              <a class="btn" href="https://songverbalportal.pages.dev/" target="_blank" rel="noopener">Song Verbal Portal</a>
-            </div>
-          </aside>
+          <!-- Diagnostic Review Tips -->
+          <div style="margin-top: 40px; padding: 20px 24px; background: #fff; border: 1px solid var(--line); border-radius: 8px; font-size: 13.5px; color: var(--ink-soft); line-height: 1.6;">
+            <strong style="color: var(--ink);">💡 GRE Verbal 오답 복습 팁</strong><br>
+            틀린 문항은 단순히 정답을 암기하기보다, 지문 내 시그널 워드(Signal words)와 단서(Clue)를 바탕으로 본인의 선택지가 어떤 함정(과도한 일반화, 인과 왜곡, 지문 밖의 전제 등)에 걸렸는지 <strong>논리적 인과관계</strong>를 분석하는 것이 실전 점수 향상의 핵심입니다.
+          </div>
         </main>
       `;
 
