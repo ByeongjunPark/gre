@@ -5,6 +5,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>GRE Verbal Mock Test — 2026-04-23 18회</title>
+<link rel="stylesheet" href="css/explanation.css">
+<script src="js/explanation_engine.js"></script>
 <style>
   :root {
     --bg: #f7f5f0;
@@ -2074,6 +2076,10 @@ function handleChoiceChange(li, input) {
 }
 
 function renderResults(app) {
+  if (window.ExplanationEngine) {
+    window.ExplanationEngine.renderResultsUI(app, examData, state, isCorrect, isAnswered, typeof TYPE_LABELS !== "undefined" ? TYPE_LABELS : null);
+    return;
+  }
   let totalCorrect = 0;
   const sectionStats = examData.sections.map(s => {
     let c = 0;
