@@ -69,8 +69,19 @@
       const whyWrong = {};
       if (q.choices && Array.isArray(q.choices)) {
         q.choices.forEach(c => {
-          if (!q.answer.includes(c.label) && !q.answer.includes(c.text)) {
-            whyWrong[c.label] = `선택지 [${c.label}]는 지문의 핵심 단서와 논리적으로 일치하지 않으며, 출제자가 유도한 매력적인 오답 함정입니다.`;
+          const isAns = q.answer && (q.answer.includes(c.label) || q.answer.includes(c.text));
+          if (!isAns) {
+            let reason = `선택지 [${c.label || c.text}]는 지문의 핵심 단서와 논리적으로 일치하지 않으며, 출제자가 유도한 매력적인 오답 함정입니다.`;
+            if (q.type === 'TC') {
+              reason = `선택지 [${c.label || c.text}]는 문맥의 시그널 워드 및 수식 관계와 논리적으로 부합하지 않는 어휘입니다.`;
+            } else if (q.type === 'SE') {
+              reason = `선택지 [${c.label || c.text}]는 정답 단어와 동의어 쌍을 형성하지 못하거나 문맥 전체의 의미를 온전히 완성하지 못합니다.`;
+            } else if (q.type && q.type.startsWith('RC')) {
+              reason = `선택지 [${c.label || c.text}]는 지문의 핵심 진술을 과도하게 일반화하거나 왜곡한 대표적인 Distractor 함정입니다.`;
+            } else if (q.type === 'CR') {
+              reason = `선택지 [${c.label || c.text}]는 논증의 전제와 결론 사이의 인과적 결함을 메우지 못하는 논점 일탈 보기입니다.`;
+            }
+            whyWrong[c.label || c.text] = reason;
           }
         });
       }
@@ -81,14 +92,14 @@
         stepByStep: steps,
         whySelectedWrong: whyWrong,
         choicesAnalysis: q.choices ? q.choices.map(c => {
-          const isCorrectChoice = q.answer.includes(c.label) || q.answer.includes(c.text);
+          const isCorrectChoice = q.answer && (q.answer.includes(c.label) || q.answer.includes(c.text));
           return {
             label: c.label || c.text,
             isCorrect: isCorrectChoice,
             text: c.text,
             analysis: isCorrectChoice
               ? `정답! 질문의 요구조건과 지문의 논리적 흐름에 완벽히 부합합니다.`
-              : `오답. 지문의 근거와 일치하지 않거나 불필요한 가정이 포함되어 있습니다.`
+              : (whyWrong[c.label || c.text] || `오답. 지문의 결정적 근거와 일치하지 않거나 불필요한 비약이 포함되어 있습니다.`)
           };
         }) : null,
         vocab: [],
@@ -130,16 +141,26 @@
         // Targeted wrong feedback
         let specificWhy = null;
         if (exp.whySelectedWrong) {
-          // Check for matching user answers
           for (let u of userAns) {
-            if (exp.whySelectedWrong[u]) {
-              specificWhy = `<strong>[${u}]</strong>: ` + exp.whySelectedWrong[u];
+            let reason = exp.whySelectedWrong[u];
+            if (reason && reason.trim() !== '오답' && reason.trim().length >= 6) {
+              specificWhy = `<strong>[${u}]</strong>: ` + reason;
+              break;
+            }
+          }
+        }
+        // Fallback: search in choicesAnalysis
+        if (!specificWhy && exp.choicesAnalysis) {
+          for (let u of userAns) {
+            const foundChoice = exp.choicesAnalysis.find(c => c.label === u || c.text === u);
+            if (foundChoice && foundChoice.analysis && foundChoice.analysis.trim() !== '오답' && foundChoice.analysis.trim().length >= 6) {
+              specificWhy = `<strong>[${u}]</strong>: ` + foundChoice.analysis;
               break;
             }
           }
         }
         if (!specificWhy) {
-          specificWhy = `회원님이 선택하신 <strong>[${userDisplay}]</strong>는 지문의 핵심 인과관계와 어긋나거나, 출제자가 유도한 매력적인 함정(Distractor)에 빠진 경우입니다. 정답인 <strong>[${correctDisplay}]</strong>와의 논리적 차이를 아래 풀이에서 반드시 확인하세요.`;
+          specificWhy = `회원님이 선택하신 <strong>[${userDisplay}]</strong>는 지문의 핵심 인과관계와 어긋나거나, 출제자가 유도한 매력적인 함정(Distractor Trap)에 빠진 경우입니다. 정답인 <strong>[${correctDisplay}]</strong>와의 논리적 차이를 아래의 [선택지별 심층 분석]에서 상세히 확인하세요.`;
         }
 
         feedbackHtml = `
@@ -346,6 +367,36 @@
         });
       });
 
+      // Compute Type Breakdown and Auto-save Attempt to History
+      const typeBreakdown = {
+        TC: { correct: 0, total: 0 },
+        SE: { correct: 0, total: 0 },
+        RC: { correct: 0, total: 0 },
+        CR: { correct: 0, total: 0 }
+      };
+      flatQuestions.forEach(item => {
+        let t = item.q.type;
+        if (t && t.startsWith('RC')) t = 'RC';
+        if (!typeBreakdown[t]) typeBreakdown[t] = { correct: 0, total: 0 };
+        typeBreakdown[t].total++;
+        if (item.isCorrect) typeBreakdown[t].correct++;
+      });
+
+      if (!self.hasSavedHistory && typeof window !== 'undefined' && window.GREHistoryManager) {
+        self.hasSavedHistory = true;
+        self.lastHistoryResult = window.GREHistoryManager.saveAttempt({
+          round: examData.round,
+          roundTitle: `${examData.round || ''} 실전 모의고사`,
+          scoreScaled: score,
+          scoreRaw: totalCorrect,
+          totalQuestions: totalQ,
+          accuracy: Math.round((totalCorrect / totalQ) * 100),
+          sections: sectionStats,
+          typeBreakdown: typeBreakdown,
+          htmlFile: (typeof location !== 'undefined' ? location.pathname.split('/').pop() : '')
+        });
+      }
+
       // Default active question for viewer mode
       if (!self.activeViewerQId && flatQuestions.length > 0) {
         const firstWrong = flatQuestions.find(item => !item.isCorrect);
@@ -497,6 +548,23 @@
             <h2>시험 채점 결과 및 문항별 심층 해설</h2>
           </div>
 
+          <!-- History Save & Delta Banner -->
+          ${self.lastHistoryResult ? `
+            <div class="history-delta-banner ${self.lastHistoryResult.isBestScore ? 'is-best' : ''}">
+              <div class="banner-left">
+                <span class="banner-icon">${self.lastHistoryResult.isBestScore ? '🏆' : (self.lastHistoryResult.delta > 0 ? '📈' : '📊')}</span>
+                <span class="banner-text">
+                  ${self.lastHistoryResult.isBestScore
+                    ? `축하합니다! 역대 최고 점수를 달성했습니다: <strong>${score}점</strong> (이전 최고 대비 갱신)`
+                    : (self.lastHistoryResult.delta !== null && self.lastHistoryResult.delta > 0
+                      ? `동일 회차 이전 응시 대비 <strong>+${self.lastHistoryResult.delta}점</strong> 상승했습니다! (${self.lastHistoryResult.prevScore}점 → ${score}점)`
+                      : `응시 기록이 성공적으로 저장되었습니다 (환산 <strong>${score}점</strong> / ${totalCorrect}문항 정답).`)}
+                </span>
+              </div>
+              <a href="index.html#history-dashboard" class="btn-banner-link">성적 추이 그래프 보기 →</a>
+            </div>
+          ` : ''}
+
           <!-- Score Card -->
           <div class="score-card">
             <div class="score-cell">
@@ -585,9 +653,10 @@
           ` : viewerHtml}
 
           <!-- Bottom Actions -->
-          <div class="results-actions" style="margin-top: 40px;">
+          <div class="results-actions" style="margin-top: 40px; display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
             <button class="btn" onclick="window.print()">결과 인쇄 / PDF 저장</button>
             <button class="btn btn-primary" onclick="location.reload()">다시 풀기</button>
+            <a class="btn" href="index.html#history-dashboard" style="background: #f1f5f9; border-color: #cbd5e1; font-weight: 600;">📈 나의 성적 추이 & 응시 이력</a>
             <a class="btn" href="index.html">모의고사 목록으로</a>
           </div>
 

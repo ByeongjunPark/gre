@@ -13,7 +13,9 @@
   <!-- Open Graph -->
   <meta property="og:title" content="GRE Verbal Test — 실전 모의고사 & 문항별 심층 해설">
   <meta property="og:description" content="실제 ETS 시험 환경과 100% 동일한 UI, 문항별 정오답 및 오답 이유 분석, 단계별 논리 풀이 제공.">
-  <meta property="og:type" content="website">
+  <!-- Styles & Scripts -->
+  <link rel="stylesheet" href="css/explanation.css">
+  <script src="js/gre_history_manager.js"></script>
 
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -480,6 +482,274 @@
       .filter-tabs { width: 100%; overflow-x: auto; }
       .hero { padding: 50px 16px 36px; }
     }
+
+    /* ── DASHBOARD SECTION ── */
+    .dashboard-section {
+      max-width: 1200px;
+      margin: -24px auto 40px;
+      padding: 0 24px;
+      position: relative;
+      z-index: 10;
+    }
+
+    .dashboard-card {
+      background: var(--surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: 16px;
+      padding: 32px;
+      box-shadow: var(--card-shadow);
+    }
+
+    .dashboard-topbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 16px;
+      margin-bottom: 24px;
+      padding-bottom: 18px;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .dashboard-title-area h2 {
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--text-main);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .dashboard-title-area p {
+      font-size: 13.5px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    .dashboard-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .btn-dash-action {
+      background: #f8fafc;
+      border: 1px solid var(--border-medium);
+      color: var(--text-muted);
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 12.5px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .btn-dash-action:hover {
+      background: #e2e8f0;
+      color: var(--text-main);
+    }
+
+    .btn-dash-action.btn-danger:hover {
+      background: #fee2e2;
+      border-color: #fca5a5;
+      color: #b91c1c;
+    }
+
+    /* KPI Cards */
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+      margin-bottom: 28px;
+    }
+
+    @media (max-width: 860px) {
+      .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+
+    @media (max-width: 480px) {
+      .kpi-grid { grid-template-columns: 1fr; }
+    }
+
+    .kpi-card {
+      background: #f8fafc;
+      border: 1px solid var(--border-subtle);
+      border-radius: 10px;
+      padding: 18px 20px;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .kpi-label {
+      font-size: 12.5px;
+      font-weight: 600;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .kpi-value {
+      font-size: 26px;
+      font-weight: 800;
+      color: var(--primary);
+      letter-spacing: -0.02em;
+    }
+
+    .kpi-sub {
+      font-size: 11.5px;
+      color: var(--text-light);
+      margin-top: 4px;
+    }
+
+    /* Chart & Diagnostics Grid */
+    .dash-analytics-grid {
+      display: grid;
+      grid-template-columns: 2fr 1fr;
+      gap: 24px;
+      margin-bottom: 28px;
+    }
+
+    @media (max-width: 992px) {
+      .dash-analytics-grid { grid-template-columns: 1fr; }
+    }
+
+    .chart-panel, .diagnostics-panel {
+      background: #f8fafc;
+      border: 1px solid var(--border-subtle);
+      border-radius: 12px;
+      padding: 20px;
+    }
+
+    .panel-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+    }
+
+    .panel-title {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--text-main);
+    }
+
+    .chart-box {
+      width: 100%;
+      min-height: 220px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .gre-trend-svg {
+      width: 100%;
+      height: auto;
+      max-height: 260px;
+    }
+
+    .chart-empty-state {
+      text-align: center;
+      padding: 40px 20px;
+      color: var(--text-muted);
+    }
+
+    .empty-icon { font-size: 32px; margin-bottom: 8px; }
+    .empty-title { font-size: 15px; font-weight: 700; color: var(--text-main); margin-bottom: 4px; }
+    .empty-desc { font-size: 13px; color: var(--text-muted); max-width: 360px; margin: 0 auto; }
+
+    /* Type Progress Bars */
+    .type-diag-list {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .type-diag-item {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .type-diag-header {
+      display: flex;
+      justify-content: space-between;
+      font-size: 12.5px;
+      font-weight: 600;
+      color: var(--text-main);
+    }
+
+    .progress-track {
+      height: 8px;
+      background: #e2e8f0;
+      border-radius: 4px;
+      overflow: hidden;
+    }
+
+    .progress-fill {
+      height: 100%;
+      background: var(--accent-blue);
+      border-radius: 4px;
+      transition: width 0.3s ease;
+    }
+
+    .progress-fill.fill-green { background: #10b981; }
+    .progress-fill.fill-amber { background: #f59e0b; }
+
+    /* History Table */
+    .history-table-box {
+      margin-top: 20px;
+      overflow-x: auto;
+    }
+
+    .history-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13.5px;
+    }
+
+    .history-table th {
+      background: #f1f5f9;
+      padding: 10px 14px;
+      text-align: left;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--text-muted);
+      border-bottom: 1px solid var(--border-medium);
+    }
+
+    .history-table td {
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--border-subtle);
+      color: var(--text-main);
+    }
+
+    .history-table tr:hover { background: #f8fafc; }
+
+    .score-highlight {
+      font-weight: 800;
+      color: var(--accent-blue);
+    }
+
+    .btn-table-action {
+      background: transparent;
+      border: 1px solid var(--border-medium);
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 11.5px;
+      color: var(--text-muted);
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-block;
+      transition: all 0.15s;
+    }
+
+    .btn-table-action:hover {
+      background: #fee2e2;
+      border-color: #fca5a5;
+      color: #b91c1c;
+    }
   </style>
 </head>
 <body>
@@ -491,6 +761,7 @@
       <span class="brand-name">GRE Verbal Test</span>
     </a>
     <nav class="nav-links">
+      <a class="nav-link" href="#history-dashboard">📊 나의 성적 리포트</a>
       <a class="nav-link" href="#tests">모의고사 회차</a>
       <a class="nav-link" href="#features">기능 안내</a>
       <a class="nav-btn-gh" href="https://github.com/ByeongjunPark/gre" target="_blank" rel="noopener">
@@ -531,6 +802,138 @@
         <div class="stat-item">
           <span class="stat-val">ETS Test UI</span>
           <span class="stat-label">Review · Mark · Hide Time</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- DASHBOARD SECTION -->
+  <section class="dashboard-section" id="history-dashboard">
+    <div class="dashboard-card">
+      <div class="dashboard-topbar">
+        <div class="dashboard-title-area">
+          <h2>📊 나의 성적 리포트 & 학습 추이</h2>
+          <p>모의고사 응시 결과와 점수 변화, 유형별 정답률을 한눈에 확인하고 취약점을 보완하세요.</p>
+        </div>
+        <div class="dashboard-actions">
+          <button class="btn-dash-action" id="btn-export-history" title="응시 데이터를 JSON 파일로 다운로드합니다.">📥 데이터 백업</button>
+          <button class="btn-dash-action" id="btn-import-history" title="백업된 JSON 데이터를 불러옵니다.">📤 데이터 가져오기</button>
+          <input type="file" id="history-file-input" accept=".json" style="display: none;">
+          <button class="btn-dash-action btn-danger" id="btn-clear-history" title="모든 응시 내역을 초기화합니다.">🗑️ 기록 초기화</button>
+        </div>
+      </div>
+
+      <!-- KPI Grid -->
+      <div class="kpi-grid">
+        <div class="kpi-card">
+          <div class="kpi-label"><span>🎯</span> 총 응시 횟수</div>
+          <div class="kpi-value" id="kpi-total">0<span style="font-size: 16px; font-weight: 600; color: var(--text-muted); margin-left: 4px;">회</span></div>
+          <div class="kpi-sub" id="kpi-total-sub">모의고사 실전 응시</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label"><span>📈</span> 최근 응시 점수</div>
+          <div class="kpi-value" id="kpi-latest">-<span style="font-size: 16px; font-weight: 600; color: var(--text-muted); margin-left: 4px;">점</span></div>
+          <div class="kpi-sub" id="kpi-latest-sub">최근 시험 결과</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label"><span>🏆</span> 최고 점수</div>
+          <div class="kpi-value" id="kpi-highest">-<span style="font-size: 16px; font-weight: 600; color: var(--text-muted); margin-left: 4px;">점</span></div>
+          <div class="kpi-sub" id="kpi-highest-sub">역대 최고 기록</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label"><span>📊</span> 누적 평균 점수</div>
+          <div class="kpi-value" id="kpi-avg">-<span style="font-size: 16px; font-weight: 600; color: var(--text-muted); margin-left: 4px;">점</span></div>
+          <div class="kpi-sub" id="kpi-avg-sub">평균 정답률 -%</div>
+        </div>
+      </div>
+
+      <!-- Analytics Grid: Chart + Type Diagnostics -->
+      <div class="dash-analytics-grid">
+        <div class="chart-panel">
+          <div class="panel-header">
+            <div class="panel-title">점수 변화 추이 (Score Trajectory)</div>
+            <span style="font-size: 12px; color: var(--text-light);">130 ~ 170 표준 스케일</span>
+          </div>
+          <div class="chart-box" id="score-trend-chart-container">
+            <!-- SVG rendered dynamically by GREHistoryManager -->
+          </div>
+        </div>
+
+        <div class="diagnostics-panel">
+          <div class="panel-header">
+            <div class="panel-title">유형별 누적 진단 (Type Breakdown)</div>
+          </div>
+          <div class="type-diag-list">
+            <div class="type-diag-item">
+              <div class="type-diag-header">
+                <span>Text Completion (TC)</span>
+                <span id="diag-tc-text">0% (0/0)</span>
+              </div>
+              <div class="progress-track">
+                <div class="progress-fill" id="diag-tc-bar" style="width: 0%;"></div>
+              </div>
+            </div>
+
+            <div class="type-diag-item">
+              <div class="type-diag-header">
+                <span>Sentence Equivalence (SE)</span>
+                <span id="diag-se-text">0% (0/0)</span>
+              </div>
+              <div class="progress-track">
+                <div class="progress-fill fill-green" id="diag-se-bar" style="width: 0%;"></div>
+              </div>
+            </div>
+
+            <div class="type-diag-item">
+              <div class="type-diag-header">
+                <span>Reading Comprehension (RC)</span>
+                <span id="diag-rc-text">0% (0/0)</span>
+              </div>
+              <div class="progress-track">
+                <div class="progress-fill fill-amber" id="diag-rc-bar" style="width: 0%;"></div>
+              </div>
+            </div>
+
+            <div class="type-diag-item">
+              <div class="type-diag-header">
+                <span>Critical Reasoning (CR)</span>
+                <span id="diag-cr-text">0% (0/0)</span>
+              </div>
+              <div class="progress-track">
+                <div class="progress-fill" id="diag-cr-bar" style="width: 0%;"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- History Table Box -->
+      <div>
+        <div class="panel-header" style="margin-bottom: 8px;">
+          <div class="panel-title">최근 응시 상세 이력</div>
+          <span style="font-size: 12.5px; color: var(--text-muted);" id="history-count-badge">총 0건</span>
+        </div>
+        <div class="history-table-box">
+          <table class="history-table">
+            <thead>
+              <tr>
+                <th style="width: 140px;">응시 일시</th>
+                <th style="width: 130px;">회차</th>
+                <th style="width: 100px;">환산 점수</th>
+                <th style="width: 110px;">맞힌 문항</th>
+                <th style="width: 90px;">정답률</th>
+                <th>섹션별 결과</th>
+                <th style="width: 130px; text-align: right;">관리</th>
+              </tr>
+            </thead>
+            <tbody id="history-table-body">
+              <tr>
+                <td colspan="7" style="text-align: center; padding: 30px; color: var(--text-muted);">
+                  아직 응시 기록이 없습니다. 아래 모의고사를 풀어보세요!
+                </td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       </div>
     </div>
@@ -909,6 +1312,7 @@
 
   <script>
     document.addEventListener('DOMContentLoaded', () => {
+      // 1. Tab filtering logic
       const tabs = document.querySelectorAll('.filter-tab');
       const cards = document.querySelectorAll('.test-card');
 
@@ -929,6 +1333,164 @@
           });
         });
       });
+
+      // 2. Dashboard Rendering & History Management
+      function updateDashboard() {
+        if (typeof window.GREHistoryManager === 'undefined') return;
+        const stats = window.GREHistoryManager.getSummaryStats();
+        const list = window.GREHistoryManager.getAllAttempts();
+
+        // Update KPIs
+        const elTotal = document.getElementById('kpi-total');
+        const elLatest = document.getElementById('kpi-latest');
+        const elHighest = document.getElementById('kpi-highest');
+        const elAvg = document.getElementById('kpi-avg');
+
+        if (elTotal) elTotal.innerHTML = `${stats.totalAttempts}<span style="font-size: 15px; font-weight: 600; color: var(--text-muted); margin-left: 4px;">회</span>`;
+        if (elLatest) {
+          elLatest.innerHTML = stats.latestScore !== null
+            ? `${stats.latestScore}<span style="font-size: 15px; font-weight: 600; color: var(--text-muted); margin-left: 4px;">점</span>`
+            : `-<span style="font-size: 15px; font-weight: 600; color: var(--text-muted); margin-left: 4px;">점</span>`;
+        }
+        if (elHighest) {
+          elHighest.innerHTML = stats.highestScore !== null && stats.totalAttempts > 0
+            ? `${stats.highestScore}<span style="font-size: 15px; font-weight: 600; color: var(--text-muted); margin-left: 4px;">점</span>`
+            : `-<span style="font-size: 15px; font-weight: 600; color: var(--text-muted); margin-left: 4px;">점</span>`;
+        }
+        if (elAvg) {
+          elAvg.innerHTML = stats.averageScore !== null
+            ? `${stats.averageScore}<span style="font-size: 15px; font-weight: 600; color: var(--text-muted); margin-left: 4px;">점</span>`
+            : `-<span style="font-size: 15px; font-weight: 600; color: var(--text-muted); margin-left: 4px;">점</span>`;
+          const elAvgSub = document.getElementById('kpi-avg-sub');
+          if (elAvgSub) elAvgSub.textContent = stats.avgAccuracy !== null ? `평균 정답률 ${stats.avgAccuracy}%` : `평균 정답률 -%`;
+        }
+
+        // Render Chart
+        const chartContainer = document.getElementById('score-trend-chart-container');
+        if (chartContainer) {
+          window.GREHistoryManager.renderScoreTrendChart(chartContainer);
+        }
+
+        // Update Diagnostics Progress Bars
+        const t = stats.typeStats;
+        const setBar = (id, pct, corr, tot) => {
+          const textEl = document.getElementById(`diag-${id}-text`);
+          const barEl = document.getElementById(`diag-${id}-bar`);
+          if (textEl) textEl.textContent = `${pct}% (${corr}/${tot})`;
+          if (barEl) barEl.style.width = `${pct}%`;
+        };
+        setBar('tc', t.TC.pct, t.TC.correct, t.TC.total);
+        setBar('se', t.SE.pct, t.SE.correct, t.SE.total);
+        setBar('rc', t.RC.pct, t.RC.correct, t.RC.total);
+        setBar('cr', t.CR.pct, t.CR.correct, t.CR.total);
+
+        // Update Table
+        const countBadge = document.getElementById('history-count-badge');
+        if (countBadge) countBadge.textContent = `총 ${list.length}건`;
+
+        const tbody = document.getElementById('history-table-body');
+        if (tbody) {
+          if (list.length === 0) {
+            tbody.innerHTML = `
+              <tr>
+                <td colspan="7" style="text-align: center; padding: 32px; color: var(--text-muted);">
+                  아직 응시 기록이 없습니다. 아래 모의고사를 풀어보세요!
+                </td>
+              </tr>
+            `;
+          } else {
+            tbody.innerHTML = list.map(item => {
+              const secStr = (item.sections || []).map(s => `S${s.sectionNum || s.num}: ${s.correct}/${s.total}`).join(' · ');
+              return `
+                <tr>
+                  <td style="font-size: 12.5px; color: var(--text-muted);">${item.dateString}</td>
+                  <td><strong>${item.roundTitle || (item.round + '회')}</strong></td>
+                  <td><span class="score-highlight">${item.scoreScaled}점</span></td>
+                  <td>${item.scoreRaw} / ${item.totalQuestions || 27}</td>
+                  <td><span style="font-weight: 600; color: ${item.accuracy >= 70 ? '#10b981' : (item.accuracy >= 50 ? '#0284c7' : '#ef4444')};">${item.accuracy}%</span></td>
+                  <td style="font-size: 12px; color: var(--text-muted);">${secStr || '-'}</td>
+                  <td style="text-align: right;">
+                    <a href="${item.htmlFile || ('Verbal_Mock_' + item.round + '.html')}" class="btn-table-action" style="color: var(--accent-blue); margin-right: 4px;">다시 풀기</a>
+                    <button class="btn-table-action btn-del-record" data-id="${item.id}">삭제</button>
+                  </td>
+                </tr>
+              `;
+            }).join('');
+
+            // Delete buttons
+            tbody.querySelectorAll('.btn-del-record').forEach(btn => {
+              btn.addEventListener('click', (e) => {
+                const id = e.currentTarget.dataset.id;
+                if (confirm('이 응시 기록을 삭제하시겠습니까?')) {
+                  window.GREHistoryManager.deleteAttempt(id);
+                  updateDashboard();
+                }
+              });
+            });
+          }
+        }
+
+        // Update Round Cards Badge
+        cards.forEach(card => {
+          const roundEl = card.querySelector('.round-number');
+          if (!roundEl) return;
+          const roundText = roundEl.textContent.replace(/[^0-9]/g, '');
+          const roundStats = window.GREHistoryManager.getRoundStats(roundText);
+          
+          let badgeEl = card.querySelector('.round-history-badge');
+          if (roundStats) {
+            if (!badgeEl) {
+              badgeEl = document.createElement('span');
+              badgeEl.className = 'round-history-badge';
+              const cardTop = card.querySelector('.card-top');
+              if (cardTop) cardTop.insertBefore(badgeEl, cardTop.firstChild);
+            }
+            badgeEl.innerHTML = `✓ 최고 ${roundStats.bestScore}점 (${roundStats.count}회 응시)`;
+          } else if (badgeEl) {
+            badgeEl.remove();
+          }
+        });
+      }
+
+      // Initial dashboard render
+      updateDashboard();
+
+      // Action Buttons
+      const btnClear = document.getElementById('btn-clear-history');
+      if (btnClear) {
+        btnClear.addEventListener('click', () => {
+          if (confirm('정말로 모든 모의고사 응시 내역을 초기화하시겠습니까? (되돌릴 수 없습니다)')) {
+            window.GREHistoryManager.clearAll();
+            updateDashboard();
+          }
+        });
+      }
+
+      const btnExport = document.getElementById('btn-export-history');
+      if (btnExport) {
+        btnExport.addEventListener('click', () => {
+          window.GREHistoryManager.exportData();
+        });
+      }
+
+      const btnImport = document.getElementById('btn-import-history');
+      const fileInput = document.getElementById('history-file-input');
+      if (btnImport && fileInput) {
+        btnImport.addEventListener('click', () => fileInput.click());
+        fileInput.addEventListener('change', (e) => {
+          const file = e.target.files[0];
+          if (!file) return;
+          const reader = new FileReader();
+          reader.onload = (evt) => {
+            const success = window.GREHistoryManager.importData(evt.target.result);
+            if (success) {
+              alert('성공적으로 데이터를 불러왔습니다!');
+              updateDashboard();
+            }
+          };
+          reader.readAsText(file);
+        });
+      }
     });
   </script>
 </body>

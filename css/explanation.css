@@ -685,6 +685,75 @@ tr.explanation-row > td {
   background: #ebe9e3;
 }
 
+/* History Delta Banner */
+.history-delta-banner {
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 8px;
+  padding: 14px 20px;
+  margin-bottom: 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.history-delta-banner.is-best {
+  background: #fefce8;
+  border-color: #fef08a;
+}
+
+.history-delta-banner .banner-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.history-delta-banner .banner-icon {
+  font-size: 22px;
+}
+
+.history-delta-banner .banner-text {
+  font-size: 14.5px;
+  color: #1e293b;
+  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+.history-delta-banner .btn-banner-link {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #0284c7;
+  text-decoration: none;
+  background: #fff;
+  border: 1px solid #cbd5e1;
+  padding: 6px 14px;
+  border-radius: 6px;
+  transition: all 0.15s;
+  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+.history-delta-banner .btn-banner-link:hover {
+  background: #f8fafc;
+  border-color: #0284c7;
+}
+
+/* Round History Badge (on index.html cards) */
+.round-history-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: #ecfdf5;
+  color: #059669;
+  border: 1px solid #a7f3d0;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
 /* Print specific styles for wrong answers notes */
 @media print {
   .topbar, .review-controls-bar, .results-actions, .results-help, .btn-expand-exp, .view-mode-toggle {
