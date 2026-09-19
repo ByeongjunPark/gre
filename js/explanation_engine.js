@@ -19,14 +19,15 @@
     expandedQIds: new Set(),
 
     getExplanationData: function(qId, round) {
-      // 1. Check specific round explanations
-      if (window.EXPLANATIONS_39 && window.EXPLANATIONS_39[qId]) {
-        return window.EXPLANATIONS_39[qId];
+      // 1. Check the round-specific explanations object (e.g. "17회" -> window.EXPLANATIONS_17)
+      const roundMatch = (round || '').match(/\d+/);
+      if (roundMatch) {
+        const key = 'EXPLANATIONS_' + roundMatch[0];
+        if (window[key] && window[key][qId]) {
+          return window[key][qId];
+        }
       }
-      if (window.EXPLANATIONS_38 && window.EXPLANATIONS_38[qId]) {
-        return window.EXPLANATIONS_38[qId];
-      }
-      // 2. Generic fallback generator for other mock tests
+      // 2. Generic fallback generator for mock tests without curated explanations
       return null;
     },
 
