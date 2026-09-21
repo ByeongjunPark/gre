@@ -16,6 +16,7 @@
   <!-- Styles & Scripts -->
   <link rel="stylesheet" href="css/explanation.css">
   <script src="js/gre_history_manager.js"></script>
+  <script src="js/gre_sync.js"></script>
 
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -816,11 +817,31 @@
           <p>모의고사 응시 결과와 점수 변화, 유형별 정답률을 한눈에 확인하고 취약점을 보완하세요.</p>
         </div>
         <div class="dashboard-actions">
+          <button class="btn-dash-action" id="btn-sync-settings" title="응시 기록을 Vercel 서버에 저장하고 기기 간에 이어서 봅니다.">☁️ 서버 저장 설정</button>
           <button class="btn-dash-action" id="btn-export-history" title="응시 데이터를 JSON 파일로 다운로드합니다.">📥 데이터 백업</button>
           <button class="btn-dash-action" id="btn-import-history" title="백업된 JSON 데이터를 불러옵니다.">📤 데이터 가져오기</button>
           <input type="file" id="history-file-input" accept=".json" style="display: none;">
           <button class="btn-dash-action btn-danger" id="btn-clear-history" title="모든 응시 내역을 초기화합니다.">🗑️ 기록 초기화</button>
         </div>
+      </div>
+
+      <div id="sync-status-line" style="font-size: 13px; color: var(--text-muted); margin: -8px 0 16px;"></div>
+      <div id="sync-panel" style="display: none; margin: 0 0 20px; padding: 16px 18px; border: 1px solid #cbd5e1; border-radius: 10px; background: #f8fafc;">
+        <div style="font-weight: 700; margin-bottom: 6px;">☁️ 서버 저장 (Vercel)</div>
+        <p style="font-size: 13px; color: var(--text-muted); line-height: 1.6; margin-bottom: 12px;">
+          응시 기록과 문항별 답안을 내 Vercel 서버에 저장하면 다른 기기에서도 이어 보고, 지난 응시를 해설과 함께 다시 열람할 수 있습니다.
+          이 사이트를 Vercel에서 열었다면 API 주소는 비워 두세요. GitHub Pages에서 열었다면 Vercel 주소(예: https://내프로젝트.vercel.app)를 입력합니다.
+        </p>
+        <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px;">
+          <input id="sync-base" type="url" placeholder="API 주소 (같은 사이트면 비워두기)" autocomplete="off" style="flex: 1 1 260px; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;">
+          <input id="sync-token" type="password" placeholder="액세스 토큰" autocomplete="off" style="flex: 1 1 200px; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;">
+        </div>
+        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+          <button class="btn-dash-action" id="btn-sync-save">저장 후 연결 테스트</button>
+          <button class="btn-dash-action" id="btn-sync-upload">이 기기 기록 서버로 업로드</button>
+          <button class="btn-dash-action" id="btn-sync-disconnect">연결 해제</button>
+        </div>
+        <div id="sync-message" style="font-size: 13px; margin-top: 10px;"></div>
       </div>
 
       <!-- KPI Grid -->
@@ -1335,6 +1356,17 @@
       });
 
       // 2. Dashboard Rendering & History Management
+      const pageByRound = {};
+      document.querySelectorAll('.test-card').forEach(card => {
+        const roundEl = card.querySelector('.round-number');
+        const link = card.querySelector('.btn-start-test');
+        if (roundEl && link) pageByRound[roundEl.textContent.replace(/[^0-9]/g, '')] = link.getAttribute('href');
+      });
+      function pageForRecord(item) {
+        if (item.htmlFile && /^Verbal_Mock_[A-Za-z0-9]{1,12}\.html$/.test(item.htmlFile)) return item.htmlFile;
+        return pageByRound[String(item.round)] || '';
+      }
+
       function updateDashboard() {
         if (typeof window.GREHistoryManager === 'undefined') return;
         const stats = window.GREHistoryManager.getSummaryStats();
@@ -1410,7 +1442,8 @@
                   <td><span style="font-weight: 600; color: ${item.accuracy >= 70 ? '#10b981' : (item.accuracy >= 50 ? '#0284c7' : '#ef4444')};">${item.accuracy}%</span></td>
                   <td style="font-size: 12px; color: var(--text-muted);">${secStr || '-'}</td>
                   <td style="text-align: right;">
-                    <a href="${item.htmlFile || ('Verbal_Mock_' + item.round + '.html')}" class="btn-table-action" style="color: var(--accent-blue); margin-right: 4px;">다시 풀기</a>
+                    ${(item.answers || item.hasAnswers) && pageForRecord(item) ? `<a href="${pageForRecord(item)}?review=${encodeURIComponent(item.id)}" class="btn-table-action" style="color: #10b981; margin-right: 4px;">해설 보기</a>` : ''}
+                    <a href="${pageForRecord(item) || '#tests'}" class="btn-table-action" style="color: var(--accent-blue); margin-right: 4px;">다시 풀기</a>
                     <button class="btn-table-action btn-del-record" data-id="${item.id}">삭제</button>
                   </td>
                 </tr>
@@ -1454,6 +1487,92 @@
 
       // Initial dashboard render
       updateDashboard();
+
+      // Server sync (Vercel API)
+      const Sync = window.GRESync;
+      const elStatusLine = document.getElementById('sync-status-line');
+      const elPanel = document.getElementById('sync-panel');
+      const elBase = document.getElementById('sync-base');
+      const elToken = document.getElementById('sync-token');
+      const elMsg = document.getElementById('sync-message');
+
+      function setMessage(text, isError) {
+        if (!elMsg) return;
+        elMsg.textContent = text;
+        elMsg.style.color = isError ? '#dc2626' : '#16a34a';
+      }
+
+      function renderSyncStatus(errorText) {
+        if (!elStatusLine || !Sync) return;
+        if (!Sync.isConfigured()) {
+          elStatusLine.textContent = '☁️ 서버 저장: 사용 안 함 (기록은 이 브라우저에만 저장됩니다)';
+          return;
+        }
+        const last = Sync.getLastSync();
+        const pending = Sync.getPendingCount();
+        let text = '☁️ 서버 저장: 연결됨' + (last ? ' · 마지막 동기화 ' + new Date(last).toLocaleString('ko-KR') : '');
+        if (pending > 0) text += ' · 업로드 대기 ' + pending + '건';
+        if (errorText) text += ' · 동기화 실패: ' + errorText;
+        elStatusLine.textContent = text;
+      }
+
+      async function syncNow() {
+        if (!Sync || !Sync.isConfigured()) return renderSyncStatus();
+        try {
+          await Sync.pull();
+          updateDashboard();
+          renderSyncStatus();
+        } catch (e) {
+          renderSyncStatus(e.message);
+        }
+      }
+
+      if (Sync) {
+        const cfg = Sync.getConfig();
+        if (elBase) elBase.value = cfg.base;
+        if (elToken) elToken.value = cfg.token;
+        renderSyncStatus();
+        syncNow();
+
+        const btnSettings = document.getElementById('btn-sync-settings');
+        if (btnSettings) btnSettings.addEventListener('click', () => {
+          elPanel.style.display = elPanel.style.display === 'none' ? 'block' : 'none';
+        });
+
+        document.getElementById('btn-sync-save').addEventListener('click', async () => {
+          if (!elToken.value.trim()) return setMessage('액세스 토큰을 입력하세요.', true);
+          Sync.setConfig(elBase.value, elToken.value);
+          setMessage('연결 확인 중…', false);
+          try {
+            const n = await Sync.testConnection();
+            setMessage('연결되었습니다. 서버에 저장된 기록 ' + n + '건.', false);
+            await syncNow();
+          } catch (e) {
+            setMessage('연결 실패: ' + e.message, true);
+            renderSyncStatus();
+          }
+        });
+
+        document.getElementById('btn-sync-upload').addEventListener('click', async () => {
+          if (!Sync.isConfigured()) return setMessage('먼저 액세스 토큰을 저장하세요.', true);
+          setMessage('업로드 중…', false);
+          try {
+            const n = await Sync.uploadAllLocal();
+            setMessage('이 기기의 기록 ' + n + '건을 서버에 업로드했습니다.', false);
+            await syncNow();
+          } catch (e) {
+            setMessage('업로드 실패: ' + e.message, true);
+          }
+        });
+
+        document.getElementById('btn-sync-disconnect').addEventListener('click', () => {
+          Sync.clearConfig();
+          elBase.value = '';
+          elToken.value = '';
+          setMessage('연결을 해제했습니다. 이 기기에 저장된 기록은 그대로 남아 있습니다.', false);
+          renderSyncStatus();
+        });
+      }
 
       // Action Buttons
       const btnClear = document.getElementById('btn-clear-history');

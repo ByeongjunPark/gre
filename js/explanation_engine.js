@@ -394,8 +394,19 @@
           accuracy: Math.round((totalCorrect / totalQ) * 100),
           sections: sectionStats,
           typeBreakdown: typeBreakdown,
-          htmlFile: (typeof location !== 'undefined' ? location.pathname.split('/').pop() : '')
+          htmlFile: (typeof location !== 'undefined' ? location.pathname.split('/').pop() : ''),
+          answers: (function() {
+            const out = {};
+            flatQuestions.forEach(item => {
+              const a = state.answers[item.q.id];
+              if (Array.isArray(a) && a.length > 0) out[item.q.id] = a.map(v => (v == null ? '' : String(v)));
+            });
+            return out;
+          })()
         });
+        if (self.lastHistoryResult && window.GRESync) {
+          window.GRESync.pushAttempt(self.lastHistoryResult.record);
+        }
       }
 
       // Default active question for viewer mode

@@ -55,6 +55,7 @@
           typeBreakdown: record.typeBreakdown || {},
           htmlFile: record.htmlFile || (typeof location !== 'undefined' ? location.pathname.split('/').pop() : '')
         };
+        if (record.answers && typeof record.answers === 'object') newRecord.answers = record.answers;
 
         // Add to beginning of array (newest first)
         list.unshift(newRecord);
@@ -78,6 +79,7 @@
         let list = this.getAllAttempts();
         list = list.filter(item => item.id !== id);
         localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+        if (root.GRESync) root.GRESync.onDelete(id);
       } catch (e) {
         console.error('Failed to delete attempt:', e);
       }
@@ -87,8 +89,18 @@
       if (typeof localStorage === 'undefined') return;
       try {
         localStorage.removeItem(STORAGE_KEY);
+        if (root.GRESync) root.GRESync.onClear();
       } catch (e) {
         console.error('Failed to clear history:', e);
+      }
+    },
+
+    replaceAll: function(list) {
+      if (typeof localStorage === 'undefined' || !Array.isArray(list)) return;
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+      } catch (e) {
+        console.error('Failed to replace history:', e);
       }
     },
 

@@ -1,0 +1,12 @@
+{
+  "name": "gre-verbal-mock",
+  "version": "1.0.0",
+  "private": true,
+  "description": "GRE Verbal mock tests with a Vercel serverless API for attempt history",
+  "dependencies": {
+    "@upstash/redis": "^1.34.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

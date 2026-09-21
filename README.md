@@ -24,8 +24,7 @@ GRE Verbal 실전 모의고사 및 **문항별 심층 논리 해설 & 오답노�
    - **🖨️ 결과 및 오답노트 인쇄 / PDF 저장 지원**
 
 3. **모의고사 회차 구성 (총 22개 회차)**
-   - 추천 회차: **39회**, **38회** (전 문항 100% 정밀 심층 해설 탑재)
-   - 기출 회차: **17회 ~ 37회** (공통 풀이 및 분석 엔진 탑재, 메인 페이지에서 즉시 회차 선택 가능)
+   - 전 회차(**17회 ~ 39회**, 총 22개)의 27문항 전부에 문항 내용 기반의 한글 심층 해설 탑재
 
 ---
 
@@ -40,3 +39,41 @@ python -m http.server 8000
 # Node.js 사용 시
 npx serve .
 ```
+
+---
+
+## ☁️ 서버 저장 (Vercel, 선택 사항)
+
+응시 기록과 **문항별 답안**을 Vercel 서버리스 API에 저장해 기기 간에 이어 보고, 지난 응시를 해설과 함께 다시 열람할 수 있습니다.
+서버 없이도 기존처럼 브라우저 localStorage만으로 동작합니다. 혼자 쓰는 용도로 설계되어 로그인 대신 **액세스 토큰 하나**로 보호합니다.
+
+### 구성
+
+| 경로 | 설명 |
+| --- | --- |
+| `api/attempts/index.js` | `GET` 목록, `POST` 저장(단건/일괄, 같은 id면 덮어쓰기), `DELETE ?confirm=all` 전체 삭제 |
+| `api/attempts/[id].js` | `GET` 상세(답안 포함), `DELETE` 삭제 |
+| `js/gre_sync.js` | 동기화 클라이언트, 지난 응시 열람(`?review=<id>`) |
+
+저장소는 Upstash Redis입니다. 모든 요청에 `Authorization: Bearer <ACCESS_TOKEN>`이 필요하며, 서버에 `ACCESS_TOKEN`이 설정되어 있지 않으면 모든 요청을 거부합니다.
+
+### 배포 순서
+
+1. 이 저장소를 Vercel에 Import 합니다. (빌드 설정 없이 Framework Preset은 **Other**)
+2. Vercel 프로젝트의 **Storage / Marketplace**에서 **Upstash Redis**를 만들어 프로젝트에 연결합니다. (`KV_REST_API_URL`, `KV_REST_API_TOKEN` 등이 자동으로 주입됩니다.)
+3. **Settings → Environment Variables**에 추가합니다.
+   - `ACCESS_TOKEN`: 길고 추측하기 어려운 임의 문자열 (예: `openssl rand -hex 32`로 생성)
+   - `ALLOWED_ORIGIN`: 사이트를 GitHub Pages 등 **다른 도메인**에서 열 때만 필요합니다. 예: `https://byeongjunpark.github.io`
+4. 재배포한 뒤 사이트의 📊 나의 성적 리포트 → **☁️ 서버 저장 설정**에서 토큰을 입력하고 **저장 후 연결 테스트**를 누릅니다.
+   - Vercel 주소로 사이트를 연다면 API 주소는 비워 둡니다. GitHub Pages에서 연다면 `https://<프로젝트>.vercel.app`를 입력합니다.
+5. 이미 이 브라우저에 쌓인 기록은 **이 기기 기록 서버로 업로드**로 올릴 수 있습니다. (답안이 저장되지 않던 예전 기록은 점수만 올라가며 해설 열람은 불가합니다.)
+
+### 동작 방식
+
+- 시험을 끝내면 기록과 답안이 로컬에 저장되고, 서버가 연결되어 있으면 함께 업로드됩니다. 업로드에 실패하면 대기열에 남았다가 다음 접속 때 다시 시도합니다.
+- 성적 리포트를 열 때마다 서버 기록과 병합합니다. 각 기록의 **해설 보기**를 누르면 `Verbal_Mock_XX.html?review=<id>`로 그 시점의 답안 기준 채점 결과와 해설이 열립니다. (새 기록은 만들어지지 않습니다.)
+- 토큰은 이 브라우저의 localStorage에 저장됩니다. 공용 PC에서는 사용 후 **연결 해제**를 누르세요.
+
+### 로컬 테스트
+
+Redis 없이도 `ACCESS_TOKEN`만 지정하면 개발용 메모리 저장소로 API를 시험할 수 있습니다. `VERCEL`이나 `NODE_ENV=production` 환경에서는 Redis가 없으면 오류를 내므로 데이터가 조용히 사라지는 일은 없습니다.

@@ -9,6 +9,7 @@
 <link rel="stylesheet" href="css/ets_gre_exam.css">
 <script src="js/explanations_17.js"></script>
 <script src="js/gre_history_manager.js"></script>
+<script src="js/gre_sync.js"></script>
 <script src="js/explanation_engine.js"></script>
 <script src="js/ets_exam_controller.js"></script>
 <style>
@@ -1284,7 +1285,26 @@ function finishSection() {
 // ============================================================
 function renderResults(app) {
   if (window.ExplanationEngine) {
-    window.ExplanationEngine.renderResultsUI(app, examData, state, isCorrect, isAnswered, typeof TYPE_LABELS !== "undefined" ? TYPE_LABELS : null);
+    stopTimer();
+    // This older template stores answers by [sectionIdx][questionIdx]; the engine expects { questionId: [values] }.
+    const flatAnswers = {};
+    examData.sections.forEach((sec, si) => sec.questions.forEach((q, qi) => {
+      const ua = state.answers[si][qi];
+      flatAnswers[q.id] = Array.isArray(ua) ? ua.map(v => (v == null ? '' : v)) : (ua ? [ua] : []);
+    }));
+    const isAnsweredFn = (qId) => {
+      const a = flatAnswers[qId];
+      return Array.isArray(a) && a.length > 0 && !a.some(v => v === '');
+    };
+    const isCorrectFn = (q) => {
+      const a = flatAnswers[q.id];
+      if (!isAnsweredFn(q.id) || a.length !== q.answer.length) return false;
+      if (q.type === 'TC' && q.blanks && q.blanks.length > 1) return a.every((v, i) => v === q.answer[i]);
+      const sortedA = a.slice().sort();
+      const sortedKey = q.answer.slice().sort();
+      return sortedA.every((v, i) => v === sortedKey[i]);
+    };
+    window.ExplanationEngine.renderResultsUI(app, examData, Object.assign({}, state, { answers: flatAnswers }), isCorrectFn, isAnsweredFn, typeof TYPE_LABELS !== "undefined" ? TYPE_LABELS : null);
     return;
   }
   stopTimer();
