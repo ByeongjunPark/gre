@@ -282,12 +282,16 @@
       if (!app) return;
       const self = this;
 
-      // This DOMContentLoaded listener is registered before the exam page's own, so it runs
-      // first — but the exam page also calls its own render() on DOMContentLoaded (and,
-      // depending on the browser/extensions, possibly again later). That call is a plain
-      // function reference on window, so disabling it here permanently stops the exam engine
-      // from ever repainting #app back over the results view for the rest of this page's life.
-      if (typeof root.render === 'function') root.render = function () {};
+      // This DOMContentLoaded listener runs before the exam page's own (registered earlier),
+      // but addEventListener bound to `render` by reference — reassigning window.render here
+      // does NOT stop that already-registered listener from firing with the ORIGINAL function.
+      // removeEventListener (same reference, still available via window.render at this point)
+      // actually cancels it. We still also null out the identifier for any *later* by-name
+      // call (a click handler, a timer), which reassignment alone correctly intercepts.
+      if (typeof root.render === 'function') {
+        document.removeEventListener('DOMContentLoaded', root.render);
+        root.render = function () {};
+      }
       if (typeof root.stopTimer === 'function') { try { root.stopTimer(); } catch (e) { /* ignore */ } }
 
       function showMessage(message) {
@@ -322,10 +326,21 @@
       root.ExplanationEngine.hasSavedHistory = true;
       root.ExplanationEngine.lastHistoryResult = null;
       root.ExplanationEngine.activeViewerQId = null;
-      root.ExplanationEngine.renderResultsUI(
-        app, examData, { answers: answers }, isCorrectFn, isAnsweredFn,
-        typeof TYPE_LABELS !== 'undefined' ? TYPE_LABELS : null
-      );
+      const paintResults = () => {
+        root.ExplanationEngine.renderResultsUI(
+          app, examData, { answers: answers }, isCorrectFn, isAnsweredFn,
+          typeof TYPE_LABELS !== 'undefined' ? TYPE_LABELS : null
+        );
+      };
+      paintResults();
+
+      // Belt and suspenders: something we haven't been able to pin down (observed on at least
+      // one real device) occasionally repaints #app back to the exam's own screen sometime
+      // after this point despite the listener removal above. Rather than chase that further,
+      // keep checking and restore the results view immediately if it ever happens.
+      setInterval(() => {
+        if (document.getElementById('app') === app && !app.querySelector('.results')) paintResults();
+      }, 400);
 
       const banner = document.createElement('div');
       banner.style.cssText = 'position:sticky;top:0;z-index:50;background:#1f3a5f;color:#fff;padding:10px 20px;font:14px -apple-system,sans-serif;display:flex;gap:12px;justify-content:space-between;align-items:center;flex-wrap:wrap;';
