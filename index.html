@@ -1530,7 +1530,9 @@
 
       if (Sync) {
         const cfg = Sync.getConfig();
-        if (elBase) elBase.value = cfg.base === 'https://gre-verbal-mock.vercel.app' ? '' : cfg.base;
+        // Always show the real saved value — never substitute a blank placeholder for a filled-in
+        // field, or clicking "저장" with nothing changed would silently overwrite it with blank.
+        if (elBase) elBase.value = cfg.base;
         if (elToken) elToken.value = cfg.token;
         renderSyncStatus();
         syncNow();
@@ -1542,6 +1544,7 @@
 
         document.getElementById('btn-sync-save').addEventListener('click', async () => {
           if (!elToken.value.trim()) return setMessage('액세스 토큰을 입력하세요.', true);
+          const previousCfg = Sync.getConfig();
           Sync.setConfig(elBase.value, elToken.value);
           setMessage('연결 확인 중…', false);
           try {
@@ -1549,7 +1552,11 @@
             setMessage('연결되었습니다. 서버에 저장된 기록 ' + n + '건.', false);
             await syncNow();
           } catch (e) {
-            setMessage('연결 실패: ' + e.message, true);
+            // Don't leave a working connection broken because of a bad edit — restore it.
+            Sync.setConfig(previousCfg.base, previousCfg.token);
+            elBase.value = previousCfg.base;
+            elToken.value = previousCfg.token;
+            setMessage('연결 실패: ' + e.message + ' (이전 설정으로 되돌렸습니다)', true);
             renderSyncStatus();
           }
         });
