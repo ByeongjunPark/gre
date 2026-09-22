@@ -282,6 +282,14 @@
       if (!app) return;
       const self = this;
 
+      // This DOMContentLoaded listener is registered before the exam page's own, so it runs
+      // first — but the exam page also calls its own render() on DOMContentLoaded (and,
+      // depending on the browser/extensions, possibly again later). That call is a plain
+      // function reference on window, so disabling it here permanently stops the exam engine
+      // from ever repainting #app back over the results view for the rest of this page's life.
+      if (typeof root.render === 'function') root.render = function () {};
+      if (typeof root.stopTimer === 'function') { try { root.stopTimer(); } catch (e) { /* ignore */ } }
+
       function showMessage(message) {
         app.innerHTML = '<main style="max-width:640px;margin:80px auto;padding:0 20px;text-align:center;font-family:-apple-system,sans-serif;">'
           + '<h2 style="margin-bottom:12px;">지난 응시 기록을 열 수 없습니다</h2>'
