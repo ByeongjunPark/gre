@@ -786,603 +786,648 @@ const examData = {
 // STATE
 // ============================================================
 const state = {
-  screen: 'start', // start | section-intro | question | results
-  currentSection: 0,
-  currentQuestion: 0,
-  answers: [{}, {}], // answers[sectionIdx][questionIdx] = value
-  sectionDone: [false, false],
+  screen: 'start', // start | sectionIntro | question | results
+  sectionIdx: 0,
+  questionIdx: 0,
+  answers: {}, // { "S1-Q1": ["C"], "S1-Q8": ["need not hew to", "require"] }
+  sectionLocked: [false, false], // 섹션 완료 후 잠김
   timer: null,
-  timeLeft: 0
+  timeRemaining: 0, // 초
+  timerExpired: [false, false]
 };
 
 // ============================================================
 // HELPERS
 // ============================================================
-function $(id) { return document.getElementById(id); }
+const TYPE_LABELS = {
+  CR: 'Critical Reasoning',
+  RC_SINGLE: 'Reading Comprehension',
+  RC_MULTI: 'Reading Comprehension',
+  TC: 'Text Completion',
+  SE: 'Sentence Equivalence'
+};
 
-function formatTime(secs) {
-  const m = Math.floor(secs / 60);
-  const s = secs % 60;
-  return String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
+function getCurrentQuestion() {
+  return examData.sections[state.sectionIdx].questions[state.questionIdx];
 }
 
-function getQuestion(si, qi) {
-  return examData.sections[si].questions[qi];
+function getCurrentSection() {
+  return examData.sections[state.sectionIdx];
 }
 
-function getTotalQ(si) {
-  return examData.sections[si].questions.length;
+function totalQuestionsAll() {
+  return examData.sections.reduce((sum, s) => sum + s.questions.length, 0);
 }
 
-// Normalize answer for comparison
-function normalizeAnswer(ans) {
-  if (!ans) return [];
-  if (Array.isArray(ans)) return ans.map(a => a.trim().toLowerCase()).sort();
-  return [String(ans).trim().toLowerCase()];
+function formatTime(seconds) {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
 
-function isCorrect(q, userAns) {
-  if (!userAns || (Array.isArray(userAns) && userAns.length === 0)) return false;
-  const correct = normalizeAnswer(q.answer);
-  const user = normalizeAnswer(userAns);
-  return JSON.stringify(correct) === JSON.stringify(user);
+function isAnswered(qId) {
+  const a = state.answers[qId];
+  return Array.isArray(a) && a.length > 0;
 }
 
-function computeScore() {
-  let total = 0;
-  let s1 = 0, s2 = 0;
-  examData.sections.forEach((sec, si) => {
-    sec.questions.forEach((q, qi) => {
-      const ua = state.answers[si][qi];
-      if (isCorrect(q, ua)) {
-        total++;
-        if (si === 0) s1++; else s2++;
-      }
-    });
-  });
-  const scaled = Math.round(examData.scoringFormula.multiplier * total) + examData.scoringFormula.base;
-  return { total, s1, s2, scaled };
+function arraysEqual(a, b) {
+  if (a.length !== b.length) return false;
+  const sa = [...a].sort();
+  const sb = [...b].sort();
+  return sa.every((v, i) => v === sb[i]);
 }
 
-function getAnswerDisplay(q, userAns) {
-  if (!userAns || (Array.isArray(userAns) && userAns.length === 0)) return '-';
-  if (q.type === 'TC') {
-    if (q.blanks.length === 1) return Array.isArray(userAns) ? userAns[0] : userAns;
-    return (Array.isArray(userAns) ? userAns : [userAns]).join(' / ');
+function isCorrect(question) {
+  const userAns = state.answers[question.id];
+  if (!userAns || userAns.length === 0) return false;
+  if (question.type === 'TC' && question.blanks.length > 1) {
+    // 순서 일치 (i, ii, iii)
+    if (userAns.length !== question.answer.length) return false;
+    return userAns.every((v, i) => v === question.answer[i]);
   }
-  if (Array.isArray(userAns)) return userAns.join(', ');
-  return userAns;
-}
-
-function getCorrectDisplay(q) {
-  if (q.type === 'TC') {
-    if (q.blanks.length === 1) return q.answer[0];
-    return q.answer.join(' / ');
-  }
-  return q.answer.join(', ');
+  return arraysEqual(userAns, question.answer);
 }
 
 // ============================================================
 // TIMER
 // ============================================================
-function startTimer(seconds) {
-  clearInterval(state.timer);
-  state.timeLeft = seconds;
-  renderTimer();
+function startTimer() {
+  if (state.timer) clearInterval(state.timer);
+  state.timeRemaining = getCurrentSection().timeLimit * 60;
+  updateTimerDisplay();
   state.timer = setInterval(() => {
-    state.timeLeft--;
-    renderTimer();
-    if (state.timeLeft <= 0) {
+    state.timeRemaining--;
+    updateTimerDisplay();
+    if (state.timeRemaining <= 0) {
       clearInterval(state.timer);
-      handleTimeUp();
+      state.timer = null;
+      state.timerExpired[state.sectionIdx] = true;
+      handleTimeExpired();
     }
   }, 1000);
 }
 
-function stopTimer() { clearInterval(state.timer); }
-
-function renderTimer() {
-  const el = $('timer');
-  if (!el) return;
-  el.textContent = formatTime(state.timeLeft);
-  if (state.timeLeft <= 60) el.classList.add('warning');
-  else el.classList.remove('warning');
+function stopTimer() {
+  if (state.timer) {
+    clearInterval(state.timer);
+    state.timer = null;
+  }
 }
 
-function handleTimeUp() {
-  state.sectionDone[state.currentSection] = true;
-  if (state.currentSection === 0) {
-    showModal('시간 종료', 'Section 1 시간이 종료되었습니다. Section 2로 이동합니다.', false, () => {
-      state.currentSection = 1;
-      state.currentQuestion = 0;
-      state.screen = 'section-intro';
-      render();
-    });
-  } else {
-    showModal('시간 종료', 'Section 2 시간이 종료되었습니다. 결과를 확인합니다.', false, () => {
-      state.screen = 'results';
-      render();
-    });
+function updateTimerDisplay() {
+  const el = document.getElementById('timer');
+  if (el) {
+    el.textContent = formatTime(state.timeRemaining);
+    if (state.timeRemaining <= 60) el.classList.add('warning');
+    else el.classList.remove('warning');
   }
+}
+
+function handleTimeExpired() {
+  showModal({
+    title: '시간 종료',
+    message: `Section ${state.sectionIdx + 1}의 시간이 종료되었습니다. ${state.sectionIdx === 0 ? '다음 섹션으로 진행합니다.' : '시험이 종료됩니다.'}`,
+    confirmText: '확인',
+    showCancel: false,
+    onConfirm: () => {
+      hideModal();
+      finishSection();
+    }
+  });
 }
 
 // ============================================================
 // MODAL
 // ============================================================
-function showModal(title, message, showCancel, onConfirm, onCancel) {
-  $('modal-title').textContent = title;
-  $('modal-message').textContent = message;
-  $('modal-cancel').style.display = showCancel ? '' : 'none';
-  $('modal').classList.add('show');
-  $('modal-confirm').onclick = () => {
-    $('modal').classList.remove('show');
+function showModal({ title, message, confirmText = '확인', cancelText = '취소', showCancel = true, onConfirm, onCancel }) {
+  document.getElementById('modal-title').textContent = title;
+  document.getElementById('modal-message').textContent = message;
+  const confirmBtn = document.getElementById('modal-confirm');
+  const cancelBtn = document.getElementById('modal-cancel');
+  confirmBtn.textContent = confirmText;
+  cancelBtn.textContent = cancelText;
+  cancelBtn.style.display = showCancel ? 'inline-block' : 'none';
+  confirmBtn.onclick = () => {
     if (onConfirm) onConfirm();
   };
-  $('modal-cancel').onclick = () => {
-    $('modal').classList.remove('show');
+  cancelBtn.onclick = () => {
     if (onCancel) onCancel();
+    hideModal();
   };
+  document.getElementById('modal').classList.add('show');
+}
+
+function hideModal() {
+  document.getElementById('modal').classList.remove('show');
 }
 
 // ============================================================
 // RENDER
 // ============================================================
 function render() {
-  const app = $('app');
-  if (state.screen === 'start') renderStart(app);
-  else if (state.screen === 'section-intro') renderSectionIntro(app);
-  else if (state.screen === 'question') renderQuestion(app);
-  else if (state.screen === 'results') renderResults(app);
+  const app = document.getElementById('app');
+  if (window.ETSExamController) {
+    window.ETSExamController.init();
+    if (state.screen === 'start') {
+      window.ETSExamController.renderStartScreen(app, examData, handleStart);
+      return;
+    } else if (state.screen === 'sectionIntro') {
+      window.ETSExamController.renderSectionIntro(app, examData, getCurrentSection(), handleSectionStart);
+      return;
+    } else if (state.screen === 'question') {
+      window.ETSExamController.renderExamScreen(app, examData, state, {
+        onNext: handleNext,
+        onPrev: handlePrev,
+        onFinishSection: finishSection,
+        onJump: (idx) => {
+          state.questionIdx = idx;
+          render();
+        },
+        onQuit: () => {
+          stopTimer();
+          state.screen = 'results';
+          render();
+        }
+      });
+      return;
+    } else if (state.screen === 'results') {
+      renderResults(app);
+      return;
+    }
+  }
+  if (state.screen === 'start') {
+    renderStart(app);
+  } else if (state.screen === 'sectionIntro') {
+    renderSectionIntro(app);
+  } else if (state.screen === 'question') {
+    renderQuestion(app);
+  } else if (state.screen === 'results') {
+    renderResults(app);
+  }
 }
 
 function renderStart(app) {
-  stopTimer();
+  const totalQ = totalQuestionsAll();
   app.innerHTML = `
-    <div id="topbar-placeholder" style="height:0"></div>
-    <main>
-      <div class="start-screen">
-        <div class="eyebrow">GRE Verbal Reasoning</div>
-        <h1>Mock Practice Test</h1>
-        <div class="round">${examData.round} &mdash; ${examData.date}</div>
-        <div class="start-info">
-          <div class="start-info-row"><span class="k">총 섹션</span><span class="v">2 Sections</span></div>
-          <div class="start-info-row"><span class="k">Section 1</span><span class="v">12문항 · 18분</span></div>
-          <div class="start-info-row"><span class="k">Section 2</span><span class="v">15문항 · 23분</span></div>
-          <div class="start-info-row"><span class="k">총 문항</span><span class="v">27문항</span></div>
-          <div class="start-info-row"><span class="k">환산 점수</span><span class="v">round(1.481 × 정답수) + 130</span></div>
-        </div>
-        <div class="start-instructions">
-          <ul>
-            <li>각 섹션은 시작 후 타이머가 자동으로 카운트다운됩니다.</li>
-            <li>섹션 완료 후에는 해당 섹션으로 돌아갈 수 없습니다.</li>
-            <li>Sentence Equivalence: 정확히 2개를 선택해야 합니다.</li>
-            <li>Text Completion: 모든 빈칸을 채워야 다음으로 진행됩니다.</li>
-            <li>건너뛰기로 이동한 문제는 나중에 돌아와서 풀 수 있습니다.</li>
-          </ul>
-        </div>
-        <button class="btn btn-primary btn-large" onclick="startExam()">시작하기</button>
-      </div>
-    </main>
-  `;
-}
+    <div class="start-screen">
+      <div class="eyebrow">GRE Verbal Reasoning</div>
+      <h1>Mock Practice Test</h1>
+      <div class="round">${examData.date} · ${examData.round}</div>
 
-function startExam() {
-  state.screen = 'section-intro';
-  state.currentSection = 0;
-  state.currentQuestion = 0;
-  render();
+      <div class="start-info">
+        <div class="start-info-row">
+          <span class="k">총 섹션 수</span>
+          <span class="v">${examData.sections.length} Sections</span>
+        </div>
+        ${examData.sections.map(s => `
+          <div class="start-info-row">
+            <span class="k">Section ${s.number}</span>
+            <span class="v">${s.questions.length} questions · ${s.timeLimit} min</span>
+          </div>
+        `).join('')}
+        <div class="start-info-row">
+          <span class="k">총 문항 수</span>
+          <span class="v">${totalQ} questions</span>
+        </div>
+        <div class="start-info-row">
+          <span class="k">채점 방식</span>
+          <span class="v">round(${examData.scoringFormula.multiplier} × correct) + ${examData.scoringFormula.base}</span>
+        </div>
+      </div>
+
+      <div class="start-instructions">
+        <ul>
+          <li>각 섹션은 독립된 타이머로 진행되며, 시간이 종료되면 자동으로 다음 섹션으로 넘어갑니다.</li>
+          <li>섹션 내에서는 자유롭게 이전 문제로 돌아가거나 건너뛸 수 있습니다.</li>
+          <li>섹션을 완료하면 해당 섹션의 답안을 변경할 수 없습니다.</li>
+          <li>Sentence Equivalence 문제는 정확히 2개의 답을 선택해야 합니다.</li>
+          <li>모든 섹션이 종료되면 채점 결과 화면이 표시됩니다.</li>
+        </ul>
+      </div>
+
+      <button class="btn btn-primary btn-large" onclick="handleStart()">시험 시작하기</button>
+    </div>
+  `;
 }
 
 function renderSectionIntro(app) {
-  stopTimer();
-  const si = state.currentSection;
-  const sec = examData.sections[si];
+  const section = getCurrentSection();
   app.innerHTML = `
-    <div style="height:0"></div>
-    <main>
-      <div class="section-intro">
-        <div class="num">Section ${sec.number} of 2</div>
-        <h2>Section ${sec.number}</h2>
-        <div class="meta">
-          ${sec.questions.length}문항 &nbsp;·&nbsp; ${sec.timeLimit}분<br>
-          For each question, follow the specific directions given.<br>
-          Select the best answer(s) for each question.
-        </div>
-        <button class="btn btn-primary btn-large" onclick="startSection()">Section ${sec.number} 시작</button>
+    <div class="section-intro">
+      <div class="num">Section ${section.number} of ${examData.sections.length}</div>
+      <h2>${state.sectionIdx === 0 ? '첫 번째 섹션을 시작합니다' : '두 번째 섹션을 시작합니다'}</h2>
+      <div class="meta">
+        <strong>${section.questions.length}개 문항</strong> · 제한 시간 <strong>${section.timeLimit}분</strong><br>
+        시작 버튼을 누르면 타이머가 작동합니다.
       </div>
-    </main>
+      <button class="btn btn-primary btn-large" onclick="handleSectionStart()">Section ${section.number} 시작</button>
+    </div>
   `;
 }
 
-function startSection() {
-  const si = state.currentSection;
-  state.screen = 'question';
-  state.currentQuestion = 0;
-  render();
-  startTimer(examData.sections[si].timeLimit * 60);
-}
-
 function renderQuestion(app) {
-  const si = state.currentSection;
-  const qi = state.currentQuestion;
-  const q = getQuestion(si, qi);
-  const totalQ = getTotalQ(si);
-  const progress = ((qi + 1) / totalQ * 100).toFixed(1);
-  const isLast = qi === totalQ - 1;
-  const userAns = state.answers[si][qi];
+  const q = getCurrentQuestion();
+  const section = getCurrentSection();
+  const totalInSection = section.questions.length;
+  const isLast = state.questionIdx === totalInSection - 1;
+  const progressPct = ((state.questionIdx + 1) / totalInSection) * 100;
 
-  // Build type label
-  const typeLabels = {CR:'Critical Reasoning', RC_SINGLE:'Reading Comprehension', RC_MULTI:'Reading Comprehension', TC:'Text Completion', SE:'Sentence Equivalence'};
-
-  // Check if next is enabled
-  let nextEnabled = false;
-  if (q.type === 'CR' || q.type === 'RC_SINGLE') {
-    nextEnabled = !!userAns;
-  } else if (q.type === 'RC_MULTI') {
-    nextEnabled = Array.isArray(userAns) && userAns.length > 0;
-  } else if (q.type === 'SE') {
-    nextEnabled = Array.isArray(userAns) && userAns.length === 2;
-  } else if (q.type === 'TC') {
-    if (q.blanks.length === 1) {
-      nextEnabled = Array.isArray(userAns) && userAns.length === 1 && userAns[0] !== undefined;
-    } else {
-      nextEnabled = Array.isArray(userAns) && userAns.length === q.blanks.length && userAns.every(a => a !== undefined && a !== null);
-    }
+  // 본문 영역 HTML 구성
+  let bodyHTML = '';
+  if (q.stimulus) {
+    bodyHTML += `<div class="stimulus">${q.stimulus}</div>`;
+  }
+  if (q.directions) {
+    bodyHTML += `<div class="directions">${q.directions}</div>`;
+  }
+  bodyHTML += `<div class="question-text">${q.questionText}</div>`;
+  bodyHTML += renderChoices(q);
+  if (q.type === 'SE') {
+    bodyHTML += `<div class="se-warning" id="se-warning">정확히 2개를 선택해주세요.</div>`;
   }
 
-  const questionContent = buildQuestionHTML(q, si, qi, userAns);
+  const isRC = q.type === 'RC_SINGLE' || q.type === 'RC_MULTI';
 
   app.innerHTML = `
     <div class="topbar">
       <div class="topbar-left">
-        <span class="label">Section</span><span class="value">${si + 1}</span>
-        &nbsp;&nbsp;
-        <span class="label">Question</span><span class="value">${qi + 1} / ${totalQ}</span>
+        <span class="label">Section</span>
+        <span class="value">${section.number}</span>
+        <span style="margin: 0 12px; color: var(--line);">·</span>
+        <span class="label">Question</span>
+        <span class="value">${state.questionIdx + 1} / ${totalInSection}</span>
       </div>
-      <div class="timer" id="timer">${formatTime(state.timeLeft)}</div>
+      <div class="timer" id="timer">${formatTime(state.timeRemaining)}</div>
     </div>
-    <div class="progress-bar"><div class="progress-fill" style="width:${progress}%"></div></div>
+    <div class="progress-bar"><div class="progress-fill" style="width: ${progressPct}%"></div></div>
+
     <main>
       <div class="question-meta">
-        <span class="qtype">${typeLabels[q.type] || q.type}</span>
-        <span>Q${qi + 1}</span>
+        <span class="qtype">${TYPE_LABELS[q.type]}</span>
+        <span>${q.id}</span>
       </div>
-      ${questionContent}
+
+      ${isRC ? `
+        <div class="layout-rc">
+          <div class="passage">
+            <div class="passage-label">Passage</div>
+            ${q.passage.split(/\n\n+/).map(p => `<p>${p}</p>`).join('')}
+          </div>
+          <div class="question-body">
+            ${bodyHTML}
+          </div>
+        </div>
+      ` : `
+        <div class="question-body">
+          ${bodyHTML}
+        </div>
+      `}
     </main>
+
     <div class="footer-nav">
       <div class="nav-group">
-        <button class="btn" onclick="goBack()" ${qi === 0 ? 'disabled' : ''}>&#8592; 이전</button>
+        <button class="btn" onclick="handlePrev()" ${state.questionIdx === 0 ? 'disabled' : ''}>← 이전</button>
       </div>
       <div class="nav-group">
-        <button class="btn" onclick="skipQuestion()">건너뛰기 &#8594;</button>
+        <button class="btn" onclick="handleSkip()">건너뛰기</button>
         ${isLast
-          ? `<button class="btn btn-finish" onclick="finishSection()" ${nextEnabled ? '' : 'disabled'}>섹션 완료 &#10003;</button>`
-          : `<button class="btn btn-primary" onclick="nextQuestion()" ${nextEnabled ? '' : 'disabled'}>다음 &#8594;</button>`
+          ? `<button class="btn btn-finish" onclick="handleFinishSection()">섹션 완료 ✓</button>`
+          : `<button class="btn btn-primary" onclick="handleNext()">다음 →</button>`
         }
       </div>
     </div>
   `;
+
+  updateTimerDisplay();
+  attachChoiceListeners();
 }
 
-function buildQuestionHTML(q, si, qi, userAns) {
-  if (q.type === 'CR') {
-    return `
-      <div class="question-body">
-        <div class="stimulus">${escHtml(q.stimulus)}</div>
-        <div class="question-text">${escHtml(q.questionText)}</div>
-        <ul class="choices">
-          ${q.choices.map(c => `
-            <li class="choice ${userAns === c.label ? 'selected' : ''}" onclick="selectSingle(${si},${qi},'${c.label}')">
-              <input type="radio" name="q${si}_${qi}" ${userAns === c.label ? 'checked' : ''} onchange="selectSingle(${si},${qi},'${c.label}')">
-              <span><span class="label">${c.label}.</span>${escHtml(c.text)}</span>
-            </li>`).join('')}
-        </ul>
-      </div>`;
+function renderChoices(q) {
+  const userAns = state.answers[q.id] || [];
+
+  if (q.type === 'CR' || q.type === 'RC_SINGLE') {
+    return `<ul class="choices">
+      ${q.choices.map(c => `
+        <li class="choice ${userAns.includes(c.label) ? 'selected' : ''}" data-value="${c.label}" data-mode="single">
+          <input type="radio" name="answer" value="${c.label}" ${userAns.includes(c.label) ? 'checked' : ''}>
+          <div><span class="label">${c.label}.</span> ${c.text}</div>
+        </li>
+      `).join('')}
+    </ul>`;
   }
 
-  if (q.type === 'RC_SINGLE' || q.type === 'RC_MULTI') {
-    const isMulti = q.type === 'RC_MULTI';
-    const choicesHtml = q.choices.map((c, ci) => {
-      const sel = isMulti
-        ? (Array.isArray(userAns) && userAns.includes(c.label))
-        : userAns === c.label;
-      return `
-        <li class="choice ${sel ? 'selected' : ''}" onclick="${isMulti ? `toggleMulti(${si},${qi},'${c.label}')` : `selectSingle(${si},${qi},'${c.label}')`}">
-          <input type="${isMulti ? 'checkbox' : 'radio'}" ${sel ? 'checked' : ''} onchange="${isMulti ? `toggleMulti(${si},${qi},'${c.label}')` : `selectSingle(${si},${qi},'${c.label}')`}">
-          <span>${isMulti ? '' : `<span class="label">${c.label}.</span>`}${escHtml(c.text)}</span>
-        </li>`;
-    }).join('');
-    return `
-      <div class="layout-rc">
-        <div class="passage">
-          <div class="passage-label">Passage</div>
-          <p>${q.passage}</p>
-        </div>
-        <div class="question-body">
-          ${isMulti ? `<div class="directions">Consider each of the choices separately and select all that apply.</div>` : ''}
-          <div class="question-text">${escHtml(q.questionText)}</div>
-          <ul class="choices">${choicesHtml}</ul>
-        </div>
-      </div>`;
-  }
-
-  if (q.type === 'TC') {
-    if (q.blanks.length === 1) {
-      const blank = q.blanks[0];
-      const choicesHtml = blank.choices.map((c, ci) => {
-        const sel = Array.isArray(userAns) && userAns[0] === c.text;
-        return `
-          <li class="choice ${sel ? 'selected' : ''}" onclick="selectTC(${si},${qi},0,'${escAttr(c.text)}')">
-            <input type="radio" name="tc_${si}_${qi}_0" ${sel ? 'checked' : ''}>
-            <span>${escHtml(c.text)}</span>
-          </li>`;
-      }).join('');
-      return `
-        <div class="question-body">
-          <div class="question-text">${escHtml(q.questionText)}</div>
-          <ul class="choices">${choicesHtml}</ul>
-        </div>`;
-    } else {
-      const cols = q.blanks.length;
-      const colsHtml = q.blanks.map((blank, bi) => {
-        const choicesHtml = blank.choices.map((c, ci) => {
-          const sel = Array.isArray(userAns) && userAns[bi] === c.text;
-          return `
-            <li class="choice ${sel ? 'selected' : ''}" onclick="selectTC(${si},${qi},${bi},'${escAttr(c.text)}')">
-              <input type="radio" name="tc_${si}_${qi}_${bi}" ${sel ? 'checked' : ''}>
-              <span>${escHtml(c.text)}</span>
-            </li>`;
-        }).join('');
-        return `
-          <div class="tc-column">
-            <div class="tc-column-header">Blank (${blank.id})</div>
-            <ul class="choices">${choicesHtml}</ul>
-          </div>`;
-      }).join('');
-      return `
-        <div class="question-body">
-          <div class="question-text">${escHtml(q.questionText)}</div>
-          <div class="tc-grid cols-${cols}">${colsHtml}</div>
-        </div>`;
-    }
+  if (q.type === 'RC_MULTI') {
+    return `<ul class="choices">
+      ${q.choices.map(c => `
+        <li class="choice ${userAns.includes(c.label) ? 'selected' : ''}" data-value="${c.label}" data-mode="multi">
+          <input type="checkbox" name="answer" value="${c.label}" ${userAns.includes(c.label) ? 'checked' : ''}>
+          <div><span class="label">${c.label}.</span> ${c.text}</div>
+        </li>
+      `).join('')}
+    </ul>`;
   }
 
   if (q.type === 'SE') {
-    const selArr = Array.isArray(userAns) ? userAns : [];
-    const choicesHtml = q.choices.map(c => {
-      const sel = selArr.includes(c.label);
+    return `<ul class="choices">
+      ${q.choices.map(c => `
+        <li class="choice ${userAns.includes(c.label) ? 'selected' : ''}" data-value="${c.label}" data-mode="se">
+          <input type="checkbox" name="answer" value="${c.label}" ${userAns.includes(c.label) ? 'checked' : ''}>
+          <div>${c.text}</div>
+        </li>
+      `).join('')}
+    </ul>`;
+  }
+
+  if (q.type === 'TC') {
+    // 빈칸 1개: 기존 세로 단일 리스트
+    if (q.blanks.length === 1) {
+      const blank = q.blanks[0];
+      const blankAns = userAns[0];
       return `
-        <li class="choice ${sel ? 'selected' : ''}" onclick="toggleSE(${si},${qi},'${c.label}')">
-          <input type="checkbox" ${sel ? 'checked' : ''}>
-          <span><span class="label">${c.label}.</span>${escHtml(c.text)}</span>
-        </li>`;
-    }).join('');
+        <div class="tc-blank-group">
+          <ul class="choices">
+            ${blank.choices.map(c => `
+              <li class="choice ${blankAns === c.label ? 'selected' : ''}" data-value="${c.label}" data-blank-idx="0" data-mode="tc">
+                <input type="radio" name="blank-${blank.id}" value="${c.label}" ${blankAns === c.label ? 'checked' : ''}>
+                <div>${c.text}</div>
+              </li>
+            `).join('')}
+          </ul>
+        </div>
+      `;
+    }
+
+    // 빈칸 2~3개: 가로 그리드 (실제 GRE 시험 형태)
+    const cols = q.blanks.length;
     return `
-      <div class="question-body">
-        <div class="directions">Select exactly two answer choices that, when used to complete the sentence, fit the meaning of the sentence as a whole and produce completed sentences that are alike in meaning.</div>
-        <div class="question-text">${escHtml(q.questionText)}</div>
-        <ul class="choices">${choicesHtml}</ul>
-        <div class="se-warning" id="se-warn-${si}-${qi}">정확히 2개를 선택해주세요.</div>
-      </div>`;
+      <div class="tc-grid cols-${cols}">
+        ${q.blanks.map((blank, idx) => {
+          const blankAns = userAns[idx];
+          return `
+            <div class="tc-column">
+              <div class="tc-column-header">Blank (${blank.id})</div>
+              <ul class="choices">
+                ${blank.choices.map(c => `
+                  <li class="choice ${blankAns === c.label ? 'selected' : ''}" data-value="${c.label}" data-blank-idx="${idx}" data-mode="tc">
+                    <input type="radio" name="blank-${blank.id}" value="${c.label}" ${blankAns === c.label ? 'checked' : ''}>
+                    <div>${c.text}</div>
+                  </li>
+                `).join('')}
+              </ul>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    `;
   }
   return '';
 }
 
-function escHtml(str) {
-  if (!str) return '';
-  return str
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-}
-
-function escAttr(str) {
-  if (!str) return '';
-  return str.replace(/'/g, '\\u0027').replace(/"/g, '\\u0022');
-}
-
-// ============================================================
-// ANSWER HANDLERS
-// ============================================================
-function selectSingle(si, qi, label) {
-  state.answers[si][qi] = label;
-  renderQuestion($('app'));
-}
-
-function toggleMulti(si, qi, label) {
-  let arr = state.answers[si][qi];
-  if (!Array.isArray(arr)) arr = [];
-  const idx = arr.indexOf(label);
-  if (idx >= 0) arr.splice(idx, 1);
-  else arr.push(label);
-  state.answers[si][qi] = arr;
-  renderQuestion($('app'));
-}
-
-function toggleSE(si, qi, label) {
-  let arr = state.answers[si][qi];
-  if (!Array.isArray(arr)) arr = [];
-  const idx = arr.indexOf(label);
-  if (idx >= 0) {
-    arr.splice(idx, 1);
-  } else {
-    if (arr.length >= 2) {
-      const w = $(`se-warn-${si}-${qi}`);
-      if (w) { w.classList.add('show'); setTimeout(() => w.classList.remove('show'), 2000); }
-      return;
-    }
-    arr.push(label);
-  }
-  state.answers[si][qi] = [...arr];
-  renderQuestion($('app'));
-}
-
-function selectTC(si, qi, blankIdx, text) {
-  let arr = state.answers[si][qi];
-  const q = getQuestion(si, qi);
-  if (!Array.isArray(arr) || arr.length !== q.blanks.length) {
-    arr = new Array(q.blanks.length).fill(null);
-  }
-  arr[blankIdx] = text;
-  state.answers[si][qi] = [...arr];
-  renderQuestion($('app'));
-}
-
-// ============================================================
-// NAVIGATION
-// ============================================================
-function goBack() {
-  if (state.currentQuestion > 0) {
-    state.currentQuestion--;
-    renderQuestion($('app'));
-  }
-}
-
-function skipQuestion() {
-  const si = state.currentSection;
-  const totalQ = getTotalQ(si);
-  if (state.currentQuestion < totalQ - 1) {
-    state.currentQuestion++;
-    renderQuestion($('app'));
-  }
-}
-
-function nextQuestion() {
-  const si = state.currentSection;
-  const totalQ = getTotalQ(si);
-  if (state.currentQuestion < totalQ - 1) {
-    state.currentQuestion++;
-    renderQuestion($('app'));
-  }
-}
-
-function finishSection() {
-  const si = state.currentSection;
-  const secNum = si + 1;
-  showModal(
-    `Section ${secNum} 완료`,
-    `Section ${secNum}을 완료하시겠습니까? 완료 후에는 Section ${secNum} 문제로 돌아갈 수 없습니다.`,
-    true,
-    () => {
-      stopTimer();
-      state.sectionDone[si] = true;
-      if (si === 0) {
-        state.currentSection = 1;
-        state.currentQuestion = 0;
-        state.screen = 'section-intro';
-        render();
+function attachChoiceListeners() {
+  const q = getCurrentQuestion();
+  document.querySelectorAll('.choice').forEach(li => {
+    li.addEventListener('click', (e) => {
+      // input 직접 클릭 시 이중 처리 방지
+      if (e.target.tagName === 'INPUT') return;
+      const input = li.querySelector('input');
+      if (input.type === 'radio') {
+        input.checked = true;
       } else {
-        state.screen = 'results';
-        render();
+        input.checked = !input.checked;
       }
-    }
-  );
+      handleChoiceChange(li, input);
+    });
+    const input = li.querySelector('input');
+    input.addEventListener('change', () => handleChoiceChange(li, input));
+  });
 }
 
-// ============================================================
-// RESULTS
-// ============================================================
+function handleChoiceChange(li, input) {
+  const q = getCurrentQuestion();
+  const mode = li.dataset.mode;
+
+  if (mode === 'single') {
+    state.answers[q.id] = [input.value];
+  } else if (mode === 'multi') {
+    let cur = state.answers[q.id] || [];
+    if (input.checked && !cur.includes(input.value)) cur = [...cur, input.value];
+    else if (!input.checked) cur = cur.filter(v => v !== input.value);
+    state.answers[q.id] = cur;
+  } else if (mode === 'se') {
+    let cur = state.answers[q.id] || [];
+    if (input.checked) {
+      if (cur.length >= 2) {
+        // 3개 이상 못 고르게 막기
+        input.checked = false;
+        const warn = document.getElementById('se-warning');
+        warn.classList.add('show');
+        warn.textContent = '최대 2개까지만 선택할 수 있습니다.';
+        setTimeout(() => warn.classList.remove('show'), 2000);
+        return;
+      }
+      cur = [...cur, input.value];
+    } else {
+      cur = cur.filter(v => v !== input.value);
+    }
+    state.answers[q.id] = cur;
+  } else if (mode === 'tc') {
+    const blankIdx = parseInt(li.dataset.blankIdx, 10);
+    let cur = state.answers[q.id] || new Array(q.blanks.length).fill(undefined);
+    cur = [...cur];
+    cur[blankIdx] = input.value;
+    state.answers[q.id] = cur;
+  }
+
+  // selected 클래스 갱신
+  if (mode === 'single' || mode === 'tc') {
+    const blankIdx = li.dataset.blankIdx;
+    const siblings = blankIdx !== undefined
+      ? document.querySelectorAll(`.choice[data-blank-idx="${blankIdx}"]`)
+      : document.querySelectorAll('.choice[data-mode="single"]');
+    siblings.forEach(s => s.classList.remove('selected'));
+    li.classList.add('selected');
+  } else {
+    if (input.checked) li.classList.add('selected');
+    else li.classList.remove('selected');
+  }
+}
+
 function renderResults(app) {
   if (window.ExplanationEngine) {
-    stopTimer();
-    // This older template stores answers by [sectionIdx][questionIdx]; the engine expects { questionId: [values] }.
-    const flatAnswers = {};
-    examData.sections.forEach((sec, si) => sec.questions.forEach((q, qi) => {
-      const ua = state.answers[si][qi];
-      flatAnswers[q.id] = Array.isArray(ua) ? ua.map(v => (v == null ? '' : v)) : (ua ? [ua] : []);
-    }));
-    const isAnsweredFn = (qId) => {
-      const a = flatAnswers[qId];
-      return Array.isArray(a) && a.length > 0 && !a.some(v => v === '');
-    };
-    const isCorrectFn = (q) => {
-      const a = flatAnswers[q.id];
-      if (!isAnsweredFn(q.id) || a.length !== q.answer.length) return false;
-      if (q.type === 'TC' && q.blanks && q.blanks.length > 1) return a.every((v, i) => v === q.answer[i]);
-      const sortedA = a.slice().sort();
-      const sortedKey = q.answer.slice().sort();
-      return sortedA.every((v, i) => v === sortedKey[i]);
-    };
-    window.ExplanationEngine.renderResultsUI(app, examData, Object.assign({}, state, { answers: flatAnswers }), isCorrectFn, isAnsweredFn, typeof TYPE_LABELS !== "undefined" ? TYPE_LABELS : null);
+    window.ExplanationEngine.renderResultsUI(app, examData, state, isCorrect, isAnswered, typeof TYPE_LABELS !== "undefined" ? TYPE_LABELS : null);
     return;
   }
-  stopTimer();
-  const { total, s1, s2, scaled } = computeScore();
-  const totalQ = examData.sections.reduce((a, s) => a + s.questions.length, 0);
+  let totalCorrect = 0;
+  const sectionStats = examData.sections.map(s => {
+    let c = 0;
+    s.questions.forEach(q => { if (isCorrect(q)) c++; });
+    totalCorrect += c;
+    return { num: s.number, correct: c, total: s.questions.length };
+  });
+  const totalQ = totalQuestionsAll();
+  const score = Math.round(examData.scoringFormula.multiplier * totalCorrect) + examData.scoringFormula.base;
 
-  let rows = '';
-  examData.sections.forEach((sec, si) => {
-    rows += `<tr class="section-divider"><td colspan="5">Section ${sec.number}</td></tr>`;
-    sec.questions.forEach((q, qi) => {
-      const ua = state.answers[si][qi];
-      const correct = isCorrect(q, ua);
-      const answered = ua && (Array.isArray(ua) ? ua.length > 0 : true);
-      const typeLabel = {CR:'CR', RC_SINGLE:'RC', RC_MULTI:'RC', TC:'TC', SE:'SE'}[q.type] || q.type;
-      const userDisp = getAnswerDisplay(q, ua);
-      const corrDisp = getCorrectDisplay(q);
-      let markHtml;
-      if (!answered) markHtml = `<span class="mark-skip">-</span> <span class="mark-wrong">✗</span>`;
-      else if (correct) markHtml = `<span class="mark-correct">✓</span>`;
-      else markHtml = `<span class="mark-wrong">✗</span>`;
-      rows += `<tr>
-        <td>S${si+1}-Q${qi+1}</td>
-        <td>${typeLabel}</td>
-        <td>${escHtml(userDisp)}</td>
-        <td>${escHtml(corrDisp)}</td>
-        <td>${markHtml}</td>
-      </tr>`;
+  let tableRows = '';
+  examData.sections.forEach(s => {
+    tableRows += `<tr class="section-divider"><td colspan="5">Section ${s.number}</td></tr>`;
+    s.questions.forEach((q, i) => {
+      const userAns = state.answers[q.id];
+      const answered = isAnswered(q.id);
+      const correct = isCorrect(q);
+      const userDisplay = answered ? userAns.join(', ') : '<span class="mark-skip">미응답</span>';
+      const correctDisplay = q.answer.join(', ');
+      const mark = correct ? '<span class="mark-correct">✓</span>' : '<span class="mark-wrong">✗</span>';
+      tableRows += `
+        <tr>
+          <td>S${s.number}-Q${i + 1}</td>
+          <td style="color: var(--ink-mute); font-size: 12px;">${TYPE_LABELS[q.type]}</td>
+          <td>${userDisplay}</td>
+          <td><strong>${correctDisplay}</strong></td>
+          <td style="text-align: center; font-size: 18px;">${mark}</td>
+        </tr>
+      `;
     });
   });
 
   app.innerHTML = `
-    <div style="height:0"></div>
-    <main>
-      <div class="results">
-        <div class="results-header">
-          <div class="eyebrow">시험 완료</div>
-          <h2>결과 확인</h2>
-          <div style="color:var(--ink-soft);font-family:-apple-system,sans-serif;font-size:14px">${examData.round} &mdash; ${examData.date}</div>
+    <main class="results">
+      <div class="results-header">
+        <div class="eyebrow">Test Complete</div>
+        <h2>채점 결과</h2>
+      </div>
+
+      <div class="score-card">
+        <div class="score-cell">
+          <div class="label">총 정답</div>
+          <div class="value">${totalCorrect}<span class="total"> / ${totalQ}</span></div>
+          <div class="sub">${sectionStats.map(s => `S${s.num}: ${s.correct}/${s.total}`).join(' · ')}</div>
         </div>
-        <div class="score-card">
-          <div class="score-cell">
-            <div class="label">총 정답</div>
-            <div class="value">${total}<span class="total"> / ${totalQ}</span></div>
-          </div>
-          <div class="score-cell">
-            <div class="label">환산 점수</div>
-            <div class="value">${scaled}</div>
-            <div class="sub">130–170 scale</div>
-          </div>
-          <div class="score-cell">
-            <div class="label">섹션별 정답</div>
-            <div class="value" style="font-size:28px">${s1}<span class="total">/12</span></div>
-            <div class="sub">S2: ${s2}/15</div>
-          </div>
+        <div class="score-cell">
+          <div class="label">정답률</div>
+          <div class="value">${Math.round(totalCorrect / totalQ * 100)}<span class="total">%</span></div>
+          <div class="sub">${totalCorrect} of ${totalQ} correct</div>
         </div>
-        <div class="results-table">
-          <table>
-            <thead>
-              <tr>
-                <th>번호</th><th>유형</th><th>내 답</th><th>정답</th><th>O/X</th>
-              </tr>
-            </thead>
-            <tbody>${rows}</tbody>
-          </table>
+        <div class="score-cell">
+          <div class="label">환산 점수</div>
+          <div class="value">${score}</div>
+          <div class="sub">round(${examData.scoringFormula.multiplier} × ${totalCorrect}) + ${examData.scoringFormula.base}</div>
         </div>
-        <div class="results-actions">
-          <button class="btn btn-primary" onclick="location.reload()">다시 풀기</button>
-          <button class="btn" onclick="window.print()">결과 인쇄</button>
-        </div>
+      </div>
+
+      <div class="results-table">
+        <table>
+          <thead>
+            <tr>
+              <th style="width: 90px;">번호</th>
+              <th>유형</th>
+              <th>내 답</th>
+              <th>정답</th>
+              <th style="width: 60px; text-align: center;">결과</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${tableRows}
+          </tbody>
+        </table>
+      </div>
+
+      <div class="results-actions">
+        <button class="btn" onclick="window.print()">결과 인쇄</button>
+        <button class="btn btn-primary" onclick="location.reload()">다시 풀기</button>
       </div>
     </main>
   `;
+}
+
+// ============================================================
+// HANDLERS
+// ============================================================
+function handleStart() {
+  state.screen = 'sectionIntro';
+  render();
+}
+
+function handleSectionStart() {
+  state.screen = 'question';
+  state.questionIdx = 0;
+  startTimer();
+  render();
+}
+
+function handlePrev() {
+  if (state.questionIdx > 0) {
+    state.questionIdx--;
+    render();
+  }
+}
+
+function handleNext() {
+  const q = getCurrentQuestion();
+  // SE: 정확히 2개 선택해야 다음으로 (단, 선택 안 했으면 건너뛰기로 간주)
+  if (q.type === 'SE') {
+    const ans = state.answers[q.id] || [];
+    if (ans.length === 1) {
+      const warn = document.getElementById('se-warning');
+      warn.classList.add('show');
+      warn.textContent = '정확히 2개를 선택해주세요. (건너뛰려면 "건너뛰기" 버튼을 누르세요.)';
+      return;
+    }
+  }
+  // TC 다중 빈칸: 일부만 채워진 경우 경고
+  if (q.type === 'TC' && q.blanks.length > 1) {
+    const ans = state.answers[q.id];
+    if (ans && ans.some(v => v === undefined) && ans.some(v => v !== undefined)) {
+      // 일부만 채워진 상태: 답을 미응답으로 처리하고 진행할지 묻지 않고, 그냥 진행
+      // (선택을 일부 해두면 복귀해서 마저 채울 수 있도록 유지)
+    }
+  }
+  state.questionIdx++;
+  render();
+}
+
+function handleSkip() {
+  // 답이 없으면 그대로, 있으면 유지
+  const totalInSection = getCurrentSection().questions.length;
+  if (state.questionIdx < totalInSection - 1) {
+    state.questionIdx++;
+    render();
+  } else {
+    // 마지막 문제에서 건너뛰기는 섹션 완료 확인
+    handleFinishSection();
+  }
+}
+
+function handleFinishSection() {
+  showModal({
+    title: `Section ${state.sectionIdx + 1} 완료`,
+    message: `Section ${state.sectionIdx + 1}을(를) 완료하시겠습니까? 완료 후에는 이 섹션의 문제로 돌아갈 수 없습니다.`,
+    confirmText: '완료',
+    cancelText: '계속 풀기',
+    onConfirm: () => {
+      hideModal();
+      finishSection();
+    }
+  });
+}
+
+function finishSection() {
+  stopTimer();
+  state.sectionLocked[state.sectionIdx] = true;
+  if (state.sectionIdx < examData.sections.length - 1) {
+    state.sectionIdx++;
+    state.questionIdx = 0;
+    state.screen = 'sectionIntro';
+  } else {
+    state.screen = 'results';
+  }
+  render();
 }
 
 // ============================================================
 // INIT
 // ============================================================
-render();
+document.addEventListener('DOMContentLoaded', render);
+render(); // 즉시 호출 (DOMContentLoaded 이후에 스크립트 실행될 수도 있음)
 </script>
 </body>
 </html>

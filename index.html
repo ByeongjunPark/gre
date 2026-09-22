@@ -829,17 +829,17 @@
       <div id="sync-panel" style="display: none; margin: 0 0 20px; padding: 16px 18px; border: 1px solid #cbd5e1; border-radius: 10px; background: #f8fafc;">
         <div style="font-weight: 700; margin-bottom: 6px;">☁️ 서버 저장 (Vercel)</div>
         <p style="font-size: 13px; color: var(--text-muted); line-height: 1.6; margin-bottom: 12px;">
-          응시 기록과 문항별 답안을 내 Vercel 서버에 저장하면 다른 기기에서도 이어 보고, 지난 응시를 해설과 함께 다시 열람할 수 있습니다.
-          이 사이트를 Vercel에서 열었다면 API 주소는 비워 두세요. GitHub Pages에서 열었다면 Vercel 주소(예: https://내프로젝트.vercel.app)를 입력합니다.
+          응시 기록과 문항별 답안을 서버에 저장하면, 이 사이트를 어디서 열든(GitHub Pages, Vercel 등) 이어 보고 지난 응시를 해설과 함께 다시 열람할 수 있습니다.
+          한 번 연결하면 이 브라우저에서는 계속 자동으로 저장됩니다. 액세스 토큰은 발급받은 값을 입력하세요. API 주소는 이 사이트와 같은 서버를 쓰면 비워 둡니다.
         </p>
         <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px;">
-          <input id="sync-base" type="url" placeholder="API 주소 (같은 사이트면 비워두기)" autocomplete="off" style="flex: 1 1 260px; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;">
+          <input id="sync-base" type="url" placeholder="API 주소 (같은 서버면 비워두기)" autocomplete="off" style="flex: 1 1 260px; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;">
           <input id="sync-token" type="password" placeholder="액세스 토큰" autocomplete="off" style="flex: 1 1 200px; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;">
         </div>
         <div style="display: flex; gap: 8px; flex-wrap: wrap;">
           <button class="btn-dash-action" id="btn-sync-save">저장 후 연결 테스트</button>
           <button class="btn-dash-action" id="btn-sync-upload">이 기기 기록 서버로 업로드</button>
-          <button class="btn-dash-action" id="btn-sync-disconnect">연결 해제</button>
+          <button class="btn-dash-action" id="btn-sync-disconnect">서버 저장 끄기</button>
         </div>
         <div id="sync-message" style="font-size: 13px; margin-top: 10px;"></div>
       </div>
@@ -1510,7 +1510,8 @@
         }
         const last = Sync.getLastSync();
         const pending = Sync.getPendingCount();
-        let text = '☁️ 서버 저장: 연결됨' + (last ? ' · 마지막 동기화 ' + new Date(last).toLocaleString('ko-KR') : '');
+        let text = '☁️ 서버 저장: 연결됨';
+        text += last ? ' · 마지막 동기화 ' + new Date(last).toLocaleString('ko-KR') : '';
         if (pending > 0) text += ' · 업로드 대기 ' + pending + '건';
         if (errorText) text += ' · 동기화 실패: ' + errorText;
         elStatusLine.textContent = text;
@@ -1529,7 +1530,7 @@
 
       if (Sync) {
         const cfg = Sync.getConfig();
-        if (elBase) elBase.value = cfg.base;
+        if (elBase) elBase.value = cfg.base === 'https://gre-verbal-mock.vercel.app' ? '' : cfg.base;
         if (elToken) elToken.value = cfg.token;
         renderSyncStatus();
         syncNow();
@@ -1566,10 +1567,10 @@
         });
 
         document.getElementById('btn-sync-disconnect').addEventListener('click', () => {
-          Sync.clearConfig();
+          Sync.disableSync();
           elBase.value = '';
           elToken.value = '';
-          setMessage('연결을 해제했습니다. 이 기기에 저장된 기록은 그대로 남아 있습니다.', false);
+          setMessage('서버 저장을 껐습니다. 이 기기에 저장된 기록은 그대로 남아 있고, 다시 켤 때까지 자동 연결도 되지 않습니다.', false);
           renderSyncStatus();
         });
       }

@@ -13,6 +13,11 @@
   const HTML_FILE_RE = /^Verbal_Mock_[A-Za-z0-9]{1,12}\.html$/;
   const TIMEOUT_MS = 12000;
 
+  // Public default API host (not a secret — just where the backend lives), so the "API 주소"
+  // field can stay blank even when this page is served from a different origin (e.g. GitHub Pages).
+  const DEFAULT_BASE = 'https://gre-verbal-mock.vercel.app';
+  const BOOTSTRAP_HASH_KEY = 'gresync';
+
   function readJson(key, fallback) {
     try {
       const raw = localStorage.getItem(key);
@@ -60,14 +65,54 @@
 
   const GRESync = {
     // ── Configuration ──
+    // Nothing is ever baked into this file — it's public source served to anyone. The token lives
+    // only in localStorage, set either by hand in the settings panel, or once via a personal
+    // "#gresync=..." bootstrap link (see applyBootstrap below), which never touches the network
+    // (URL fragments aren't sent to servers) and is scrubbed from the address bar immediately.
+    isUsingDefault: function () {
+      return readJson(CFG_KEY, null) === null;
+    },
+
     getConfig: function () {
-      const saved = readJson(CFG_KEY, {});
-      const base = typeof saved.base === 'string' ? saved.base : (root.GRE_API_BASE || '');
+      const saved = readJson(CFG_KEY, null);
+      if (saved === null || saved.disabled) return { base: '', token: '' };
+      // An empty base is a valid, explicit choice meaning "same origin as this page" — it must
+      // NOT be coerced to DEFAULT_BASE here. Bootstrap links always embed a concrete base, so this
+      // only affects someone who deliberately left the settings-panel API address blank.
+      const base = typeof saved.base === 'string' ? saved.base : '';
       return { base: base.replace(/\/+$/, ''), token: typeof saved.token === 'string' ? saved.token : '' };
     },
 
     setConfig: function (base, token) {
       writeJson(CFG_KEY, { base: String(base || '').trim().replace(/\/+$/, ''), token: String(token || '').trim() });
+    },
+
+    // Decodes a one-time "#gresync=<base64url({t,b})>" link into this browser's localStorage,
+    // then removes it from the address bar so the token doesn't linger in history/bookmarks.
+    applyBootstrap: function () {
+      const hash = String(location.hash || '');
+      const m = hash.match(new RegExp('#' + BOOTSTRAP_HASH_KEY + '=([^&]+)'));
+      if (!m) return false;
+      try {
+        const b64 = m[1].replace(/-/g, '+').replace(/_/g, '/');
+        const json = decodeURIComponent(escape(atob(b64)));
+        const data = JSON.parse(json);
+        if (!data || typeof data.t !== 'string' || !data.t) throw new Error('malformed bootstrap payload');
+        this.setConfig(typeof data.b === 'string' && data.b ? data.b : DEFAULT_BASE, data.t);
+      } catch (e) {
+        console.error('GRESync: invalid bootstrap link', e);
+      } finally {
+        history.replaceState(null, '', location.pathname + location.search);
+      }
+      return true;
+    },
+
+    disableSync: function () {
+      writeJson(CFG_KEY, { disabled: true });
+      try {
+        localStorage.removeItem(PENDING_KEY);
+        localStorage.removeItem(LAST_SYNC_KEY);
+      } catch (e) { /* ignore */ }
     },
 
     clearConfig: function () {
@@ -286,6 +331,9 @@
   root.GRESync = GRESync;
 
   if (typeof document !== 'undefined') {
+    // Runs immediately (not on DOMContentLoaded) so a bootstrap link takes effect before
+    // this page's own exam/history code checks whether sync is configured.
+    if (typeof location !== 'undefined') GRESync.applyBootstrap();
     document.addEventListener('DOMContentLoaded', function () {
       GRESync.initReview();
     });
